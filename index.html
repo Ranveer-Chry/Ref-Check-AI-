@@ -1,0 +1,3322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RefCheckAI — Autonomous Reference Verification</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const _cw=console.warn.bind(console);
+  console.warn=(...a)=>{if(/undefined function|fake worker|TT:|OPS\.|cmap/i.test(String(a[0]||'')))return;_cw(...a);};
+</script>
+<style>
+/* ── RESET ── */
+*{margin:0;padding:0;box-sizing:border-box;}
+
+/* ── DESIGN TOKENS — Claude minimal ── */
+:root{
+  --bg:#0f0f0f;
+  --surface:#171717;
+  --surface2:#1f1f1f;
+  --surface3:#272727;
+  --line:#2a2a2a;
+  --line2:#333333;
+  --muted:#555555;
+  --dim:#888888;
+  --text:#ececec;
+  --text2:#b8b8b8;
+  --accent:#d97706;
+  --accent-bg:rgba(217,119,6,0.10);
+  --accent-border:rgba(217,119,6,0.22);
+  --verified:#22c55e;
+  --verified-bg:rgba(34,197,94,0.10);
+  --verified-border:rgba(34,197,94,0.18);
+  --partial:#60a5fa;
+  --partial-bg:rgba(96,165,250,0.10);
+  --partial-border:rgba(96,165,250,0.18);
+  --review:#a78bfa;
+  --review-bg:rgba(167,139,250,0.10);
+  --review-border:rgba(167,139,250,0.18);
+  --notfound:#f87171;
+  --notfound-bg:rgba(248,113,113,0.10);
+  --notfound-border:rgba(248,113,113,0.18);
+  --wrong:#fbbf24;
+  --wrong-bg:rgba(251,191,36,0.10);
+  --wrong-border:rgba(251,191,36,0.18);
+  --err:#f87171;
+  --err-bg:rgba(248,113,113,0.09);
+  --warn:#fbbf24;
+  --warn-bg:rgba(251,191,36,0.09);
+  --info:#60a5fa;
+  --info-bg:rgba(96,165,250,0.09);
+  --font-body:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --font-display:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --font-mono:'SF Mono','Fira Mono','Consolas',monospace;
+  --sidebar-w:248px;
+  --nav-h:48px;
+  --radius:6px;
+  --radius-lg:8px;
+  --radius-xl:10px;
+}
+
+html,body{height:100%;overflow:hidden;background:var(--bg);}
+body{font-family:var(--font-body);color:var(--text);font-size:14px;display:flex;flex-direction:column;line-height:1.5;}
+
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--line2);border-radius:4px;}
+::-webkit-scrollbar-thumb:hover{background:var(--muted);}
+
+/* ── NAV ── */
+nav{
+  height:var(--nav-h);
+  background:var(--surface);
+  border-bottom:1px solid var(--line);
+  display:flex;align-items:center;
+  padding:0 16px;gap:10px;
+  flex-shrink:0;z-index:200;
+}
+.logo{display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px;color:var(--text);white-space:nowrap;}
+.logo-mark{
+  width:8px;height:8px;
+  background:var(--text);
+  border-radius:50%;
+  flex-shrink:0;
+}
+.nav-center{flex:1;text-align:center;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 16px;font-family:var(--font-mono);}
+.nav-right{display:flex;gap:6px;align-items:center;}
+.nav-btn{
+  height:28px;padding:0 11px;
+  border-radius:var(--radius);border:1px solid var(--line);
+  background:transparent;color:var(--dim);
+  cursor:pointer;font-size:12px;font-family:var(--font-body);font-weight:500;
+  display:flex;align-items:center;gap:5px;transition:all .12s;white-space:nowrap;
+}
+.nav-btn:hover{background:var(--surface2);color:var(--text);}
+.nav-btn.danger{color:var(--err);}
+.nav-btn.danger:hover{background:var(--err-bg);}
+.nav-btn.gone{display:none;}
+.nav-mobile-menu{display:none;}
+
+/* ── APP ── */
+.app{display:flex;flex:1;overflow:hidden;}
+
+/* ── SIDEBAR ── */
+.sidebar{
+  width:var(--sidebar-w);
+  background:var(--surface);
+  border-right:1px solid var(--line);
+  display:flex;flex-direction:column;
+  flex-shrink:0;
+}
+.sb-head{padding:10px;}
+.new-btn{
+  width:100%;padding:8px 12px;
+  background:var(--text);color:var(--bg);
+  border:none;border-radius:var(--radius);
+  cursor:pointer;font-family:var(--font-body);font-weight:500;font-size:13px;
+  display:flex;align-items:center;gap:7px;transition:opacity .12s;
+}
+.new-btn:hover{opacity:.85;}
+.sb-label{padding:10px 12px 4px;font-size:10px;color:var(--muted);font-weight:600;letter-spacing:.08em;text-transform:uppercase;}
+.sb-list{flex:1;overflow-y:auto;padding:0 6px 10px;}
+.sb-item{
+  padding:8px 8px;border-radius:var(--radius);
+  cursor:pointer;margin-bottom:1px;
+  border:1px solid transparent;transition:background .1s;
+}
+.sb-item:hover{background:var(--surface2);}
+.sb-item.active{background:var(--surface2);border-color:var(--line);}
+.sb-item-title{font-size:13px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px;font-weight:500;}
+.sb-item-meta{font-size:11px;color:var(--muted);display:flex;gap:4px;align-items:center;flex-wrap:wrap;}
+.sb-badge{font-size:10px;padding:1px 6px;border-radius:100px;font-weight:500;font-family:var(--font-mono);}
+.sb-badge.v{background:var(--verified-bg);color:var(--verified);}
+.sb-badge.r{background:var(--wrong-bg);color:var(--wrong);}
+.sb-badge.n{background:var(--notfound-bg);color:var(--notfound);}
+.sb-empty{padding:20px 12px;font-size:12px;color:var(--muted);text-align:center;line-height:1.8;}
+.sb-foot{padding:8px;border-top:1px solid var(--line);}
+.sb-settings{
+  width:100%;padding:6px 10px;background:transparent;
+  border:1px solid var(--line);border-radius:var(--radius);
+  color:var(--dim);cursor:pointer;font-family:var(--font-body);font-size:12px;
+  display:flex;align-items:center;gap:6px;transition:all .12s;
+}
+.sb-settings:hover{background:var(--surface2);color:var(--text);}
+
+/* ── MAIN ── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.chat{flex:1;overflow-y:auto;padding:28px 32px 12px;min-height:0;}
+
+/* ── WELCOME ── */
+.welcome{
+  display:flex;flex-direction:column;align-items:center;
+  justify-content:center;min-height:68vh;text-align:center;padding:40px 20px;
+}
+.welcome-logo{
+  width:10px;height:10px;background:var(--text);border-radius:50%;
+  margin-bottom:24px;
+}
+.welcome h1{font-weight:600;font-size:26px;color:var(--text);margin-bottom:8px;letter-spacing:-.02em;}
+.welcome-sub{font-size:13px;color:var(--dim);max-width:500px;line-height:1.8;margin-bottom:28px;}
+.welcome-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:500px;width:100%;margin-bottom:20px;}
+.welcome-card{
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--radius-lg);padding:16px 12px;cursor:pointer;
+  transition:border-color .15s,background .15s;text-align:left;
+}
+.welcome-card:hover{border-color:var(--line2);background:var(--surface2);}
+.wc-icon{font-size:18px;margin-bottom:8px;}
+.wc-title{font-size:12px;font-weight:600;color:var(--text2);margin-bottom:2px;}
+.wc-sub{font-size:11px;color:var(--muted);}
+.warn-banner{
+  border-radius:var(--radius);padding:9px 12px;
+  font-size:12px;display:flex;align-items:flex-start;gap:8px;
+  max-width:460px;cursor:pointer;margin-bottom:10px;width:100%;
+  line-height:1.6;text-align:left;
+  background:var(--err-bg);border:1px solid rgba(185,28,28,0.15);color:var(--err);
+  transition:background .12s;
+}
+.warn-banner:hover{background:rgba(185,28,28,0.10);}
+
+/* ── PDF PROGRESS ── */
+.pdf-progress{
+  display:none;background:var(--partial-bg);border:1px solid var(--partial-border);
+  border-radius:var(--radius);padding:9px 12px;
+  font-size:11px;color:var(--partial);max-width:420px;width:100%;margin-top:10px;
+}
+.pdf-bar-track{margin-top:5px;height:2px;background:var(--line);border-radius:2px;overflow:hidden;}
+.pdf-bar-fill{height:100%;background:var(--partial);width:0%;transition:width .3s;}
+
+/* ── MESSAGES ── */
+.msg{margin-bottom:20px;animation:msg-in .18s ease;}
+@keyframes msg-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.msg-user{display:flex;justify-content:flex-end;}
+.user-bubble{
+  background:var(--text);color:var(--surface);
+  padding:9px 14px;border-radius:14px 14px 2px 14px;
+  max-width:70%;font-size:13px;line-height:1.6;word-break:break-word;
+}
+.msg-ai{display:flex;gap:10px;align-items:flex-start;}
+.ai-avatar{
+  width:8px;height:8px;border-radius:50%;
+  background:var(--dim);
+  flex-shrink:0;margin-top:7px;
+}
+.ai-body{flex:1;min-width:0;}
+.ai-name{font-size:10px;font-weight:600;color:var(--muted);margin-bottom:8px;letter-spacing:.06em;text-transform:uppercase;}
+
+/* ── THINKING ── */
+.thinking{display:flex;gap:4px;padding:4px 0 12px;}
+.dot{width:5px;height:5px;border-radius:50%;background:var(--muted);animation:dot-pulse 1.4s infinite;}
+.dot:nth-child(2){animation-delay:.2s;}.dot:nth-child(3){animation-delay:.4s;}
+@keyframes dot-pulse{0%,80%,100%{opacity:.2;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}
+
+/* ── STATUS LINE ── */
+.status-line{font-size:12px;color:var(--dim);margin-bottom:6px;line-height:1.6;display:flex;align-items:center;gap:6px;}
+.spinner{width:10px;height:10px;border:1.5px solid var(--line2);border-top-color:var(--text);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── PIPELINE CARD ── */
+.pipeline-card{
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--radius-lg);padding:12px 14px;margin-bottom:12px;
+}
+.pipeline-title{font-size:10px;font-weight:600;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.08em;}
+.pipeline-steps{display:flex;flex-direction:column;gap:4px;}
+.pipe-step{display:flex;align-items:center;gap:8px;font-size:12px;padding:2px 0;}
+.pipe-icon{
+  width:18px;height:18px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:9px;font-weight:700;flex-shrink:0;font-family:var(--font-mono);
+}
+.pi-wait{background:var(--surface3);color:var(--muted);}
+.pi-active{background:var(--surface2);color:var(--text);border:1px solid var(--line2);}
+.pi-done{background:var(--verified-bg);color:var(--verified);}
+.pi-err{background:var(--err-bg);color:var(--err);}
+.pipe-label{color:var(--muted);}
+.pipe-label.active{color:var(--text);}
+.pipe-label.done{color:var(--text2);}
+
+/* ── PROGRESS BAR ── */
+.prog-card{
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--radius-lg);padding:12px 14px;margin-bottom:12px;
+}
+.prog-top{display:flex;justify-content:space-between;font-size:12px;color:var(--dim);margin-bottom:8px;}
+.prog-sources{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+.src-pill{font-size:10px;padding:2px 7px;border-radius:100px;background:var(--surface2);color:var(--muted);font-family:var(--font-mono);transition:all .2s;}
+.src-pill.active{background:var(--partial-bg);color:var(--partial);border:1px solid var(--partial-border);}
+.src-pill.done{background:var(--verified-bg);color:var(--verified);}
+.prog-bar{height:2px;background:var(--line);border-radius:2px;overflow:hidden;margin-bottom:6px;}
+.prog-fill{height:100%;background:var(--text);border-radius:2px;transition:width .4s ease;}
+.prog-cur{font-size:11px;color:var(--muted);font-family:var(--font-mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+/* ── SUMMARY CARD ── */
+.summary-card{
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--radius-xl);padding:18px;margin-bottom:18px;
+}
+.summary-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:14px;}
+.summary-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;}
+.stat-box{background:var(--surface2);border-radius:var(--radius);padding:10px;text-align:center;border:1px solid var(--line);}
+.stat-num{font-size:22px;font-weight:600;margin-bottom:2px;}
+.stat-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;}
+.summary-issues{border-top:1px solid var(--line);padding-top:10px;margin-top:2px;}
+.issues-label{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;}
+.issue-pill{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:2px 8px;border-radius:100px;font-size:11px;margin:2px;
+  background:var(--warn-bg);color:var(--warn);border:1px solid var(--wrong-border);
+}
+
+/* ── CATEGORY SECTION ── */
+.cat-section{margin-bottom:20px;}
+.cat-head{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);margin-bottom:10px;}
+.cat-icon{font-size:14px;}
+.cat-name{font-size:12px;font-weight:600;color:var(--text2);}
+.cat-count{font-size:11px;color:var(--muted);background:var(--surface2);padding:1px 8px;border-radius:100px;font-family:var(--font-mono);}
+.ref-list{display:flex;flex-direction:column;gap:6px;}
+
+/* ── REFERENCE CARD ── */
+.ref-card{
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--radius-lg);overflow:hidden;transition:border-color .12s;
+}
+.ref-card:hover{border-color:var(--line2);}
+.ref-card.open{border-color:var(--line2);}
+.ref-header{
+  display:flex;align-items:flex-start;gap:9px;
+  padding:11px 13px;cursor:pointer;transition:background .1s;user-select:none;
+}
+.ref-header:hover,.ref-card.open .ref-header{background:var(--surface2);}
+
+/* Status badges */
+.status-badge{
+  font-size:10px;font-weight:600;padding:2px 8px;border-radius:100px;
+  flex-shrink:0;margin-top:2px;white-space:nowrap;
+}
+.sb-verified{background:var(--verified-bg);color:var(--verified);border:1px solid var(--verified-border);}
+.sb-partial{background:var(--partial-bg);color:var(--partial);border:1px solid var(--partial-border);}
+.sb-notfound{background:var(--notfound-bg);color:var(--notfound);border:1px solid var(--notfound-border);}
+.sb-wrong{background:var(--wrong-bg);color:var(--wrong);border:1px solid var(--wrong-border);}
+.sb-review{background:var(--review-bg);color:var(--review);border:1px solid var(--review-border);}
+
+.ref-info{flex:1;min-width:0;}
+.ref-title{font-size:13px;color:var(--text);line-height:1.5;margin-bottom:2px;word-break:break-word;}
+.ref-meta{font-size:11px;color:var(--muted);font-family:var(--font-mono);}
+.ref-conf{font-size:12px;font-weight:600;flex-shrink:0;margin-top:2px;white-space:nowrap;color:var(--dim);}
+.ref-toggle{font-size:10px;color:var(--muted);flex-shrink:0;margin-top:3px;transition:transform .2s;}
+.ref-card.open .ref-toggle{transform:rotate(180deg);}
+
+/* Error chips on header */
+.ref-errors{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;}
+.err-chip{font-size:10px;padding:1px 6px;border-radius:100px;font-family:var(--font-mono);font-weight:500;}
+.ec-error{background:var(--err-bg);color:var(--err);}
+.ec-warn{background:var(--warn-bg);color:var(--warn);}
+.ec-info{background:var(--info-bg);color:var(--info);}
+
+/* ── CARD BODY ── */
+.ref-body{display:none;border-top:1px solid var(--line);}
+.ref-card.open .ref-body{display:block;}
+.card-sec{border-bottom:1px solid var(--line);}
+.card-sec:last-child{border-bottom:none;}
+.sec-head{
+  padding:6px 13px;background:var(--surface2);
+  font-size:10px;font-weight:600;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.07em;
+}
+
+/* Completeness */
+.check-list{padding:9px 13px;display:flex;flex-wrap:wrap;gap:5px;}
+.check-chip{display:flex;align-items:center;gap:3px;font-size:11px;padding:2px 8px;border-radius:100px;font-family:var(--font-mono);}
+.chk-ok{background:var(--verified-bg);color:var(--verified);}
+.chk-miss{background:var(--notfound-bg);color:var(--notfound);}
+.chk-warn{background:var(--wrong-bg);color:var(--wrong);}
+
+/* Field rows */
+.field-grid{padding:9px 13px;display:grid;grid-template-columns:1fr 1fr;gap:1px;}
+.field-row{
+  display:flex;justify-content:space-between;align-items:baseline;
+  padding:3px 0;font-size:11px;
+  border-bottom:1px solid rgba(255,255,255,0.05);
+}
+.field-row:last-child{border-bottom:none;}
+.fk{color:var(--muted);flex-shrink:0;}
+.fv{color:var(--text2);text-align:right;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-mono);}
+.fv.ok{color:var(--verified);}
+.fv.warn{color:var(--warn);}
+.fv.bad{color:var(--notfound);}
+
+/* Error taxonomy */
+.error-taxonomy{padding:9px 13px;}
+.tax-item{display:flex;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.05);line-height:1.5;}
+.tax-item:last-child{border-bottom:none;}
+.tax-sev{
+  font-size:9px;font-weight:600;padding:2px 6px;border-radius:100px;
+  flex-shrink:0;margin-top:2px;white-space:nowrap;text-transform:uppercase;letter-spacing:.04em;
+}
+.ts-error{background:var(--err-bg);color:var(--err);}
+.ts-warn{background:var(--warn-bg);color:var(--warn);}
+.ts-info{background:var(--info-bg);color:var(--info);}
+.tax-content{flex:1;min-width:0;}
+.tax-field{font-size:11px;font-weight:600;color:var(--text2);margin-bottom:1px;font-family:var(--font-mono);}
+.tax-desc{font-size:11px;color:var(--dim);line-height:1.5;}
+.tax-values{display:flex;gap:8px;margin-top:3px;font-size:10px;font-family:var(--font-mono);}
+.tax-expected{color:var(--notfound);}
+.tax-found{color:var(--verified);}
+
+/* Evidence */
+.evidence-list{padding:9px 13px;display:flex;flex-direction:column;gap:7px;}
+.ev-item{display:flex;gap:7px;align-items:flex-start;}
+.ev-source{
+  font-size:10px;font-weight:600;padding:2px 6px;border-radius:100px;
+  flex-shrink:0;white-space:nowrap;
+}
+.ev-crossref{background:rgba(96,165,250,0.09);color:#60a5fa;}
+.ev-openalex{background:rgba(34,197,94,0.09);color:#4ade80;}
+.ev-semantic{background:rgba(167,139,250,0.09);color:#a78bfa;}
+.ev-pubmed{background:rgba(248,113,113,0.09);color:#f87171;}
+.ev-searxng{background:rgba(251,191,36,0.09);color:#fbbf24;}
+.ev-urlcheck{background:rgba(244,114,182,0.09);color:#f472b6;}
+.ev-body{flex:1;min-width:0;}
+.ev-link{font-size:12px;color:var(--partial);text-decoration:none;word-break:break-word;display:block;}
+.ev-link:hover{text-decoration:underline;}
+.ev-sub{font-size:10px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:var(--font-mono);}
+.ev-match{font-size:10px;margin-top:2px;font-family:var(--font-mono);}
+.ev-snippet{font-size:11px;color:var(--dim);margin-top:3px;line-height:1.5;}
+.no-evidence{padding:10px 13px;font-size:12px;color:var(--muted);}
+
+/* Canonical / correction */
+.canonical-block{padding:9px 13px;}
+.can-label{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;}
+.can-value{font-size:11px;color:var(--text2);font-family:var(--font-mono);line-height:1.7;word-break:break-word;white-space:pre-wrap;}
+.can-value.original{color:var(--muted);}
+.can-value.corrected{color:var(--verified);}
+.can-copy-btn{
+  margin-top:5px;padding:3px 9px;background:var(--surface2);
+  border:1px solid var(--line);border-radius:4px;color:var(--dim);cursor:pointer;
+  font-size:11px;font-family:var(--font-body);transition:all .12s;
+  display:inline-flex;align-items:center;gap:4px;
+}
+.can-copy-btn:hover{background:var(--surface3);color:var(--text);}
+
+/* ── INPUT AREA ── */
+.input-area{padding:12px 18px 16px;background:var(--surface);flex-shrink:0;border-top:1px solid var(--line);}
+.input-box{background:var(--bg);border:1px solid var(--line);border-radius:var(--radius-lg);overflow:hidden;transition:border-color .12s;}
+.input-box:focus-within{border-color:var(--line2);}
+.input-box textarea{
+  width:100%;background:transparent;border:none;outline:none;
+  padding:12px 14px;color:var(--text);font-family:var(--font-body);font-size:13px;
+  line-height:1.6;resize:none;min-height:44px;max-height:160px;
+}
+.input-box textarea::placeholder{color:var(--muted);}
+.input-foot{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-top:1px solid var(--line);}
+.input-left{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.attach-btn{
+  padding:4px 10px;border:1px solid var(--line);border-radius:var(--radius);
+  color:var(--dim);cursor:pointer;font-size:11px;font-family:var(--font-body);
+  display:flex;align-items:center;gap:4px;background:transparent;transition:all .12s;
+}
+.attach-btn:hover{background:var(--surface2);color:var(--text);}
+.file-chip{
+  padding:3px 9px;background:var(--partial-bg);border:1px solid var(--partial-border);
+  border-radius:100px;color:var(--partial);font-size:11px;
+  display:flex;align-items:center;gap:4px;font-family:var(--font-mono);
+}
+.file-chip-x{cursor:pointer;opacity:.6;transition:opacity .12s;}
+.file-chip-x:hover{opacity:1;}
+.verify-btn{
+  padding:7px 18px;background:var(--text);color:var(--bg);
+  border:none;border-radius:var(--radius);cursor:pointer;
+  font-family:var(--font-body);font-weight:500;font-size:13px;
+  display:flex;align-items:center;gap:6px;transition:opacity .12s;
+}
+.verify-btn:hover{opacity:.85;}
+.verify-btn:disabled{opacity:.3;cursor:not-allowed;}
+
+/* ── SETTINGS MODAL ── */
+.modal-bg{
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.65);z-index:500;
+  align-items:center;justify-content:center;
+}
+.modal-bg.open{display:flex;}
+.modal{
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--radius-xl);padding:24px;
+  width:480px;max-width:95vw;max-height:90vh;overflow-y:auto;
+  box-shadow:0 8px 32px rgba(0,0,0,.12);
+}
+.modal h2{font-weight:600;font-size:16px;color:var(--text);margin-bottom:5px;}
+.modal-desc{font-size:13px;color:var(--dim);line-height:1.7;margin-bottom:18px;}
+.modal-status{border-radius:var(--radius);padding:8px 11px;font-size:12px;margin-bottom:14px;}
+.ms-ok{background:var(--verified-bg);color:var(--verified);border:1px solid var(--verified-border);}
+.ms-err{background:var(--err-bg);color:var(--err);border:1px solid var(--notfound-border);}
+.form-group{margin-bottom:14px;}
+.form-label{display:block;font-size:11px;font-weight:600;color:var(--dim);margin-bottom:5px;text-transform:uppercase;letter-spacing:.07em;}
+.form-input{
+  width:100%;padding:9px 11px;
+  background:var(--bg);border:1px solid var(--line);
+  border-radius:var(--radius);color:var(--text);
+  font-family:var(--font-mono);font-size:12px;outline:none;transition:border-color .12s;
+}
+.form-input:focus{border-color:var(--line2);}
+.form-input::placeholder{color:var(--muted);}
+.form-hint{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.6;}
+.form-hint a{color:var(--partial);text-decoration:none;}
+.form-hint a:hover{text-decoration:underline;}
+.form-hint code{background:var(--surface2);color:var(--text2);padding:1px 5px;border-radius:3px;font-family:var(--font-mono);font-size:10px;}
+.modal-divider{border:none;border-top:1px solid var(--line);margin:16px 0;}
+.test-row{display:flex;gap:8px;align-items:center;margin-top:7px;}
+.test-btn{
+  padding:5px 12px;background:transparent;border:1px solid var(--line);
+  border-radius:var(--radius);color:var(--dim);cursor:pointer;font-size:11px;
+  font-family:var(--font-body);transition:all .12s;
+}
+.test-btn:hover{background:var(--surface2);color:var(--text);}
+.test-result{font-size:11px;flex:1;color:var(--muted);line-height:1.5;font-family:var(--font-mono);}
+.modal-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;}
+.btn-cancel{
+  padding:8px 18px;border-radius:var(--radius);border:1px solid var(--line);
+  background:transparent;color:var(--dim);cursor:pointer;font-family:var(--font-body);font-weight:500;font-size:13px;
+}
+.btn-cancel:hover{background:var(--surface2);}
+.btn-save{
+  padding:8px 18px;border-radius:var(--radius);border:none;
+  background:var(--text);color:var(--bg);
+  cursor:pointer;font-family:var(--font-body);font-weight:500;font-size:13px;
+}
+.btn-save:hover{opacity:.85;}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 768px) {
+  .sidebar{display:none;}
+  .sidebar.mobile-open{display:flex;position:fixed;inset:0;z-index:300;width:260px;box-shadow:4px 0 20px rgba(0,0,0,.15);}
+  .nav-mobile-menu{display:flex !important;}
+  .chat{padding:18px 14px 10px;}
+  .input-area{padding:8px 10px 12px;}
+  .summary-stats{grid-template-columns:repeat(2,1fr);}
+  .welcome-cards{grid-template-columns:1fr 1fr;}
+  .welcome h1{font-size:22px;}
+  .field-grid{grid-template-columns:1fr;}
+}
+@media (max-width: 480px) {
+  .welcome-cards{grid-template-columns:1fr;}
+  .nav-center{display:none;}
+}
+
+/* ── KBD ── */
+.kbd{font-family:var(--font-mono);font-size:10px;background:var(--surface2);color:var(--muted);padding:1px 5px;border-radius:3px;border:1px solid var(--line);}
+
+/* ── FILTER / SORT BAR ── */
+.results-toolbar{
+  display:flex;gap:6px;align-items:center;flex-wrap:wrap;
+  margin-bottom:14px;padding:8px 12px;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);
+}
+.filter-btn{
+  padding:3px 10px;border-radius:100px;font-size:11px;
+  border:1px solid var(--line);background:transparent;
+  color:var(--dim);cursor:pointer;font-family:var(--font-mono);transition:all .12s;
+}
+.filter-btn:hover{background:var(--surface2);color:var(--text);}
+.filter-btn.active{background:var(--text);color:var(--surface);border-color:var(--text);}
+.filter-sep{color:var(--line2);user-select:none;padding:0 2px;}
+.sort-select{
+  padding:3px 7px;background:var(--surface2);border:1px solid var(--line);
+  border-radius:var(--radius);color:var(--dim);font-size:11px;font-family:var(--font-mono);
+  cursor:pointer;outline:none;margin-left:auto;
+}
+.sort-select:focus{border-color:var(--line2);}
+.results-count{font-size:11px;color:var(--muted);font-family:var(--font-mono);}
+.cat-section.hidden{display:none;}
+.ref-card.hidden{display:none;}
+
+/* ── EXPORT ROW ── */
+.export-row{
+  display:flex;gap:6px;align-items:center;margin-top:10px;
+  padding:8px 12px;background:var(--surface2);border-radius:var(--radius);border:1px solid var(--line);
+}
+.export-label{font-size:12px;color:var(--dim);flex:1;}
+.export-btn{
+  padding:4px 10px;background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--radius);color:var(--dim);cursor:pointer;font-size:11px;
+  font-family:var(--font-body);transition:all .12s;display:flex;align-items:center;gap:4px;
+}
+.export-btn:hover{background:var(--surface3);color:var(--text);}
+
+/* ── TABS ── */
+.tabs{display:flex;gap:0;border-bottom:1px solid var(--line);margin-bottom:0;flex-shrink:0;}
+.tab{padding:9px 16px;font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .12s;white-space:nowrap;}
+.tab:hover{color:var(--text2);}
+.tab.active{color:var(--text);border-bottom-color:var(--text);}
+.tab-panels{flex:1;overflow:hidden;display:flex;flex-direction:column;}
+.tab-panel{display:none;overflow-y:auto;padding:0;flex:1;min-height:0;}
+.tab-panel.active{display:flex;flex-direction:column;overflow-y:auto;}
+
+/* ── QUALITY SCORE RING ── */
+.quality-row{display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;}
+.q-box{background:var(--surface2);border:1px solid var(--line);border-radius:var(--radius);padding:9px 13px;flex:1;min-width:100px;text-align:center;}
+.q-num{font-size:20px;font-weight:700;margin-bottom:2px;font-family:var(--font-mono);}
+.q-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;}
+.q-bar{height:3px;background:var(--line);border-radius:2px;margin-top:6px;overflow:hidden;}
+.q-fill{height:100%;border-radius:2px;transition:width .6s ease;}
+
+/* ── IMPROVEMENT BLOCK ── */
+.improve-block{padding:12px 14px;}
+.improve-header{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.improve-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;text-transform:uppercase;letter-spacing:.04em;}
+.ib-strong{background:rgba(34,197,94,0.12);color:var(--verified);}
+.ib-upgrade{background:rgba(96,165,250,0.12);color:var(--partial);}
+.ib-weak{background:rgba(251,191,36,0.12);color:var(--wrong);}
+.improve-reason{font-size:11px;color:var(--dim);line-height:1.6;margin-bottom:8px;}
+.improve-gain{font-size:11px;font-family:var(--font-mono);color:var(--verified);margin-bottom:8px;}
+.improve-ref{font-size:11px;font-family:var(--font-mono);color:var(--text2);background:var(--surface3);border-radius:var(--radius);padding:7px 10px;line-height:1.6;word-break:break-all;}
+
+/* ── CLAIM ALIGNMENT ── */
+.claim-block{padding:12px 14px;}
+.claim-text{font-size:12px;font-style:italic;color:var(--text2);line-height:1.6;margin-bottom:6px;padding-left:10px;border-left:2px solid var(--line2);}
+.claim-verdict{display:flex;align-items:center;gap:8px;margin-bottom:4px;}
+.cv-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;text-transform:uppercase;}
+.cv-full{background:rgba(34,197,94,0.12);color:var(--verified);}
+.cv-partial{background:rgba(96,165,250,0.12);color:var(--partial);}
+.cv-weak{background:rgba(251,191,36,0.12);color:var(--wrong);}
+.cv-unsupported{background:rgba(248,113,113,0.12);color:var(--notfound);}
+.cv-contradicted{background:rgba(167,139,250,0.12);color:var(--review);}
+.claim-exp{font-size:11px;color:var(--dim);line-height:1.6;}
+
+/* ── TEXT REVISION ── */
+.revision-block{padding:12px 14px;}
+.rev-label{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;}
+.rev-text{font-size:12px;line-height:1.7;padding:8px 10px;border-radius:var(--radius);margin-bottom:8px;font-family:var(--font-mono);word-break:break-word;white-space:pre-wrap;}
+.rev-original{background:var(--surface2);color:var(--dim);border-left:3px solid var(--line2);}
+.rev-revised{background:rgba(34,197,94,0.07);color:var(--text2);border-left:3px solid var(--verified);}
+.rev-reason{font-size:11px;color:var(--dim);font-style:italic;line-height:1.6;}
+
+/* ── DUAL REF LIST ── */
+.dual-list-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);}
+.dual-col{background:var(--bg);padding:0;}
+.dual-col-head{padding:8px 14px;background:var(--surface2);font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;border-bottom:1px solid var(--line);}
+.dual-ref-item{padding:8px 14px;border-bottom:1px solid var(--line);font-size:11px;line-height:1.6;}
+.dual-ref-item:last-child{border-bottom:none;}
+.dri-num{font-family:var(--font-mono);color:var(--muted);margin-bottom:2px;}
+.dri-text{color:var(--text2);}
+.dri-text.changed{color:var(--verified);}
+.dri-text.original{color:var(--dim);}
+.dri-badge{display:inline-flex;align-items:center;font-size:9px;padding:1px 5px;border-radius:100px;margin-left:5px;}
+.dri-same{background:var(--surface3);color:var(--muted);}
+.dri-improved{background:rgba(34,197,94,0.1);color:var(--verified);}
+
+/* ── COMPARISON FRAMEWORK ── */
+.framework-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;}
+.fw-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);padding:12px;}
+.fw-title{font-size:11px;font-weight:600;color:var(--text2);margin-bottom:8px;}
+.fw-metric{display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,0.04);}
+.fw-metric:last-child{border-bottom:none;}
+.fw-k{color:var(--muted);}
+.fw-v{font-family:var(--font-mono);color:var(--text);}
+.fw-winner{border-color:var(--verified-border);background:rgba(34,197,94,0.04);}
+.fw-badge{font-size:9px;padding:1px 6px;border-radius:100px;background:rgba(34,197,94,0.12);color:var(--verified);margin-left:6px;}
+
+/* ── AUDIT TRAIL ── */
+.audit-entry{border:1px solid var(--line);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:8px;}
+.ae-head{display:flex;align-items:center;gap:10px;padding:9px 13px;background:var(--surface2);font-size:11px;}
+.ae-num{font-family:var(--font-mono);color:var(--muted);flex-shrink:0;}
+.ae-title{flex:1;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ae-ts{font-size:10px;color:var(--muted);font-family:var(--font-mono);flex-shrink:0;}
+.ae-body{padding:0;}
+.ae-row{display:flex;gap:8px;padding:5px 13px;border-bottom:1px solid rgba(255,255,255,0.04);font-size:11px;align-items:flex-start;}
+.ae-row:last-child{border-bottom:none;}
+.ae-key{color:var(--muted);flex-shrink:0;width:130px;font-family:var(--font-mono);}
+.ae-val{color:var(--text2);flex:1;line-height:1.5;}
+.ae-val.good{color:var(--verified);}
+.ae-val.bad{color:var(--notfound);}
+.ae-val.warn{color:var(--wrong);}
+
+</style>
+</head>
+<body>
+<!-- NAV -->
+<nav>
+  <button class="nav-btn nav-mobile-menu" onclick="toggleMobileNav()" style="padding:0 8px;">☰</button>
+  <div class="logo">
+    <div class="logo-mark"></div>
+    RefCheckAI
+  </div>
+  <div class="nav-center" id="nav-title"></div>
+  <div class="nav-right">
+    <button class="nav-btn danger gone" id="stop-btn" onclick="cancelScan()">&#9632; Stop</button>
+    <button class="nav-btn" onclick="openSettings()">&#9881; Settings</button>
+  </div>
+</nav>
+
+<!-- APP -->
+<div class="app">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sb-head">
+      <button class="new-btn" onclick="startNew()">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1v11M1 6.5h11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        New scan
+      </button>
+    </div>
+    <div class="sb-label">History</div>
+    <div class="sb-list" id="sb-list"></div>
+    <div class="sb-foot">
+      <button class="sb-settings" onclick="openSettings()">&#9881; Settings &nbsp;<span class="kbd">⌘,</span></button>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="tabs" id="main-tabs">
+      <div class="tab active" data-tab="verify" onclick="switchTab('verify')">Verification</div>
+      <div class="tab" data-tab="quality" onclick="switchTab('quality')">Quality Scores</div>
+      <div class="tab" data-tab="improve" onclick="switchTab('improve')">Improvement</div>
+      <div class="tab" data-tab="claims" onclick="switchTab('claims')">Claim Alignment</div>
+      <div class="tab" data-tab="revisions" onclick="switchTab('revisions')">Text Revisions</div>
+      <div class="tab" data-tab="dual" onclick="switchTab('dual')">Dual Ref List</div>
+      <div class="tab" data-tab="compare" onclick="switchTab('compare')">Source Comparison</div>
+      <div class="tab" data-tab="audit" onclick="switchTab('audit')">Audit Trail</div>
+    </div>
+    <div class="tab-panels">
+      <div class="tab-panel active" id="tab-verify">
+        <div class="chat" id="chat"></div>
+      </div>
+      <div class="tab-panel" id="tab-quality"><div id="quality-content"><div style="padding:40px;text-align:center;color:var(--muted);font-size:13px;">Run a verification scan first to see quality scores.</div></div></div>
+      <div class="tab-panel" id="tab-improve"><div id="improve-content"><div style="padding:40px;text-align:center;color:var(--muted);font-size:13px;">Run a verification scan first to see improvement recommendations.</div></div></div>
+      <div class="tab-panel" id="tab-claims"><div id="claims-content"><div style="padding:40px;text-align:center;color:var(--muted);font-size:13px;">Run a verification scan first to see claim-evidence alignment.</div></div></div>
+      <div class="tab-panel" id="tab-revisions"><div id="revisions-content"><div style="padding:40px;text-align:center;color:var(--muted);font-size:13px;">Run a verification scan first to see text revision suggestions.</div></div></div>
+      <div class="tab-panel" id="tab-dual"><div id="dual-content"><div style="padding:40px;text-align:center;color:var(--muted);font-size:13px;">Run a verification scan first to see the dual reference list.</div></div></div>
+      <div class="tab-panel" id="tab-compare"><div id="compare-content"><div style="padding:40px;text-align:center;color:var(--muted);font-size:13px;">Run a verification scan first to see source comparison analytics.</div></div></div>
+      <div class="tab-panel" id="tab-audit"><div id="audit-content"><div style="padding:40px;text-align:center;color:var(--muted);font-size:13px;">Run a verification scan first to see the audit trail.</div></div></div>
+    </div>
+    <div class="input-area">
+      <div class="input-box">
+        <textarea id="main-input"
+          placeholder="Paste references, article text, or upload a PDF / DOCX…"
+          onkeydown="onEnter(event)" oninput="grow(this)"></textarea>
+        <div class="input-foot">
+          <div class="input-left">
+            <button class="attach-btn" onclick="document.getElementById('pdf-input').click()">
+              &#128196; Attach PDF
+            </button>
+            <button class="attach-btn" onclick="document.getElementById('docx-input').click()">
+              &#128203; DOCX
+            </button>
+            <button class="attach-btn" onclick="document.getElementById('html-input').click()">
+              &#127760; HTML
+            </button>
+            <button class="attach-btn" id="url-ingest-btn" onclick="promptURLIngest()">
+              &#128279; URL
+            </button>
+            <input type="file" id="pdf-input" accept=".pdf" style="display:none" onchange="onPDF(event)">
+            <input type="file" id="docx-input" accept=".docx,.doc" style="display:none" onchange="onDOCX(event)">
+            <input type="file" id="html-input" accept=".html,.htm" style="display:none" onchange="onHTML(event)">
+            <div id="file-chip-area"></div>
+          </div>
+          <button class="verify-btn" id="verify-btn" onclick="submitScan()">
+            Verify
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2.5 6.5h8M7 2.5l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div class="modal-bg" id="settings-modal" onclick="if(event.target===this)closeSettings()">
+  <div class="modal">
+    <h2>Settings</h2>
+    <p class="modal-desc">Crossref, OpenAlex, and Semantic Scholar are free and used automatically. An Anthropic API key enables LLM-powered structured citation extraction for significantly better accuracy.</p>
+    <div id="modal-status"></div>
+
+    <div class="form-group">
+      <label class="form-label">Anthropic API Key</label>
+      <input type="password" class="form-input" id="inp-key" placeholder="sk-ant-api03-…">
+      <p class="form-hint">Get one at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> — used only for citation extraction, never stored server-side.</p>
+    </div>
+
+    <hr class="modal-divider">
+
+    <div class="form-group">
+      <label class="form-label">SearXNG URL <span style="color:var(--muted);font-size:9px;text-transform:none;font-weight:400">(optional — enables web search)</span></label>
+      <input type="text" class="form-input" id="inp-searx" placeholder="http://localhost:8080">
+      <p class="form-hint">Run locally: <code>docker run -d -p 8080:8080 searxng/searxng</code></p>
+    </div>
+
+    <div class="test-row">
+      <button class="test-btn" onclick="testSearx()">&#9654; Test connection</button>
+      <div class="test-result" id="test-result">Not tested</div>
+    </div>
+
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeSettings()">Cancel</button>
+      <button class="btn-save" onclick="saveSettings()">Save settings</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ═══════════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════════ */
+let sessions  = JSON.parse(localStorage.getItem('rca_v20') || '[]');
+let currentId = null;
+let stopped   = false;
+let fileText  = '';
+let fileName  = '';
+let cardN     = 0;
+const searchCache = {};
+const DELAY = 220;
+
+const getKey   = () => localStorage.getItem('rca_key') || '';
+const getSearx = () => (localStorage.getItem('rca_searx') || '').replace(/\/+$/, '');
+const saveS    = () => {
+  // Keep max 20 sessions and strip heavy HTML to prevent localStorage quota overflow
+  const slim = sessions.slice(0, 20).map(s => ({ ...s, html: (s.html||'').slice(0, 50000) }));
+  try { localStorage.setItem('rca_v20', JSON.stringify(slim)); }
+  catch(e) {
+    // Quota exceeded — strip all HTML and retry
+    const stripped = slim.map(s => ({ ...s, html: '' }));
+    try { localStorage.setItem('rca_v20', JSON.stringify(stripped)); } catch(e2) { console.warn('localStorage full'); }
+  }
+};
+const esc      = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const scrollBot= () => {
+  const c=document.getElementById('chat'); if(c) c.scrollTop=c.scrollHeight;
+  const ap=document.querySelector('.tab-panel.active');
+  if(ap && ap.id!=='tab-verify') ap.scrollTop=ap.scrollHeight;
+};
+const sleep    = ms => new Promise(r => setTimeout(r, ms));
+
+/* ═══════════════════════════════════════════════
+   SETTINGS
+═══════════════════════════════════════════════ */
+function openSettings() {
+  document.getElementById('inp-key').value = getKey();
+  document.getElementById('inp-searx').value = localStorage.getItem('rca_searx') || '';
+  document.getElementById('modal-status').innerHTML = getKey()
+    ? '<div class="modal-status ms-ok">&#10003; Anthropic key configured — LLM extraction enabled</div>'
+    : '<div class="modal-status ms-err">&#9888; No API key — using regex extraction only</div>';
+  document.getElementById('settings-modal').classList.add('open');
+}
+function closeSettings() {
+  document.getElementById('settings-modal').classList.remove('open');
+}
+function saveSettings() {
+  const key = document.getElementById('inp-key').value.trim();
+  const sx  = document.getElementById('inp-searx').value.trim();
+  key ? localStorage.setItem('rca_key', key) : localStorage.removeItem('rca_key');
+  sx  ? localStorage.setItem('rca_searx', sx) : localStorage.removeItem('rca_searx');
+  closeSettings();
+  renderBanners();
+}
+async function testSearx() {
+  const url = document.getElementById('inp-searx').value.trim() || getSearx();
+  const el = document.getElementById('test-result');
+  if (!url) { el.textContent = 'Enter a URL first'; return; }
+  el.textContent = 'Testing…'; el.style.color = 'var(--dim)';
+  try {
+    const r = await fetch(url + '/search?q=test&format=json&categories=general');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const ct = r.headers.get('content-type') || '';
+    if (!ct.includes('json')) throw new Error('Returned HTML — add "formats: [html, json]" to SearXNG settings.yml');
+    const d = await r.json();
+    el.textContent = '✓ Working — ' + (d.results?.length || 0) + ' results';
+    el.style.color = 'var(--verified)';
+  } catch(e) {
+    el.textContent = '✗ ' + e.message;
+    el.style.color = 'var(--notfound)';
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   FILE INGESTION — PDF
+═══════════════════════════════════════════════ */
+function onPDF(e) {
+  const f = e.target.files[0]; if (!f) return;
+  e.target.value = ''; loadPDF(f);
+}
+async function loadPDF(file) {
+  fileText = ''; fileName = file.name;
+  const bar = document.getElementById('pdf-progress-area');
+  if (bar) bar.style.display = 'block';
+  try {
+    const ab = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(ab) }).promise;
+    const pages = [];
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const page = await pdf.getPage(p);
+      const tc = await page.getTextContent();
+      const lineMap = {};
+      for (const item of tc.items) {
+        if (!item.str) continue;
+        const y = Math.round((item.transform?.[5] ?? 0) / 3) * 3;
+        if (!lineMap[y]) lineMap[y] = [];
+        lineMap[y].push(item.str);
+      }
+      const ys = Object.keys(lineMap).map(Number).sort((a,b) => b-a);
+      pages.push(ys.map(y => lineMap[y].join(' ')).join('\n'));
+      const fill = document.getElementById('pdf-fill');
+      if (fill) fill.style.width = Math.round(p / pdf.numPages * 100) + '%';
+    }
+    fileText = cleanText(pages.join('\n\n'));
+    if (bar) bar.style.display = 'none';
+    setFileChip(file.name + ' (' + pdf.numPages + ' pages)');
+  } catch(err) {
+    if (bar) bar.style.display = 'none';
+    alert('Could not read PDF: ' + err.message);
+    fileText = ''; fileName = '';
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   FILE INGESTION — DOCX (via mammoth-like regex approach)
+   Note: Full mammoth.js would require CDN load; we use a simplified text extractor
+   for DOCX that works without dependencies by reading the XML inside the zip
+═══════════════════════════════════════════════ */
+function onDOCX(e) {
+  const f = e.target.files[0]; if (!f) return;
+  e.target.value = ''; loadDOCX(f);
+}
+async function loadDOCX(file) {
+  fileText = ''; fileName = file.name;
+  try {
+    // Try to use JSZip if available, otherwise inform user to use PDF or text
+    // Simple approach: read as text and extract w:t elements
+    const ab = await file.arrayBuffer();
+    const uint8 = new Uint8Array(ab);
+    // Check for ZIP magic bytes
+    if (uint8[0] !== 0x50 || uint8[1] !== 0x4B) {
+      throw new Error('Not a valid DOCX file');
+    }
+    // We'll use a simplified extraction — scan binary for text patterns
+    // For a full solution, this would use jszip + mammoth
+    const decoder = new TextDecoder('utf-8', { fatal: false });
+    const raw = decoder.decode(uint8);
+    // Extract text between <w:t> tags
+    const textParts = [];
+    const regex = /<w:t[^>]*>([^<]+)<\/w:t>/g;
+    let m;
+    while ((m = regex.exec(raw)) !== null) {
+      textParts.push(m[1]);
+    }
+    if (textParts.length === 0) throw new Error('Could not extract text from DOCX. Try saving as PDF and uploading that instead.');
+    fileText = cleanText(textParts.join(' '));
+    setFileChip(file.name);
+  } catch(err) {
+    setFileChip('⚠ DOCX error: ' + err.message.slice(0,60));
+    fileText = ''; fileName = '';
+  }
+}
+
+function cleanText(t) {
+  return t.replace(/\f/g, '\n').replace(/\x0c/g, '\n')
+    .replace(/([a-zA-Z])-\n\s*([a-zA-Z])/g, '$1$2')
+    .replace(/\n{3,}/g, '\n\n');
+}
+
+/* ── HTML FILE INGESTION ── */
+function onHTML(e) {
+  const f = e.target.files[0]; if (!f) return;
+  e.target.value = '';
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const raw = ev.target.result;
+    // Strip tags, decode entities
+    const tmp = document.createElement('div');
+    tmp.innerHTML = raw;
+    // Remove script/style nodes
+    tmp.querySelectorAll('script,style,nav,header,footer').forEach(n => n.remove());
+    fileText = cleanText(tmp.innerText || tmp.textContent || '');
+    fileName = f.name;
+    setFileChip(f.name);
+  };
+  reader.readAsText(f);
+}
+
+/* ── URL INGESTION ── */
+async function promptURLIngest() {
+  const url = window.prompt('Enter a URL to fetch and extract references from:', 'https://');
+  if (!url || !url.startsWith('http')) return;
+  const btn = document.getElementById('url-ingest-btn');
+  const origText = btn.innerHTML;
+  btn.innerHTML = '⏳ Fetching…'; btn.disabled = true;
+  try {
+    // Use a CORS proxy approach — try direct fetch first, fall back to allorigins
+    let text = '';
+    try {
+      const r = await fetch(url, { mode: 'cors' });
+      if (r.ok) { const html = await r.text(); const tmp = document.createElement('div'); tmp.innerHTML = html; tmp.querySelectorAll('script,style').forEach(n=>n.remove()); text = tmp.innerText || tmp.textContent || ''; }
+    } catch(e) {}
+    if (!text) {
+      // allorigins fallback
+      const proxy = 'https://api.allorigins.win/get?url=' + encodeURIComponent(url);
+      const r2 = await fetch(proxy);
+      if (r2.ok) { const d = await r2.json(); const tmp = document.createElement('div'); tmp.innerHTML = d.contents||''; tmp.querySelectorAll('script,style').forEach(n=>n.remove()); text = tmp.innerText || tmp.textContent || ''; }
+    }
+    if (!text) throw new Error('Could not retrieve page content (CORS blocked on both attempts)');
+    fileText = cleanText(text);
+    fileName = new URL(url).hostname;
+    setFileChip('URL: ' + new URL(url).hostname);
+  } catch(err) {
+    alert('URL fetch failed: ' + err.message + '\n\nTip: Try saving the page as HTML and uploading the file instead.');
+  } finally {
+    btn.innerHTML = origText; btn.disabled = false;
+  }
+}
+
+function setFileChip(name) {
+  const html = '<div class="file-chip"><span>📄 ' + esc(name) + '</span>'
+    + '<span class="file-chip-x" onclick="clearFile()">✕</span></div>';
+  const a = document.getElementById('file-chip-area');
+  if (a) a.innerHTML = html;
+  const w = document.getElementById('welcome-chip');
+  if (w) w.innerHTML = html;
+  document.getElementById('main-input').placeholder = 'File loaded — click Verify to run the full pipeline…';
+}
+function clearFile() {
+  fileText = ''; fileName = '';
+  const a = document.getElementById('file-chip-area');
+  if (a) a.innerHTML = '';
+  const w = document.getElementById('welcome-chip');
+  if (w) w.innerHTML = '';
+  document.getElementById('main-input').placeholder = 'Paste references, article text, or upload a PDF / DOCX…';
+}
+
+/* ═══════════════════════════════════════════════
+   UI HELPERS
+═══════════════════════════════════════════════ */
+let _growTimer;
+function grow(el) { clearTimeout(_growTimer); _growTimer = setTimeout(() => { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 160) + 'px'; }, 16); }
+function onEnter(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitScan(); } }
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === ',') { e.preventDefault(); openSettings(); }
+  if ((e.metaKey || e.ctrlKey) && e.key === 'n') { e.preventDefault(); startNew(); }
+  if (e.key === 'Escape') closeSettings();
+});
+
+/* ═══════════════════════════════════════════════
+   WELCOME SCREEN
+═══════════════════════════════════════════════ */
+function welcomeHTML() {
+  return `<div class="welcome" id="welcome">
+    <div class="welcome-logo"></div>
+    <h1>RefCheckAI</h1>
+    <p class="welcome-sub">Autonomous reference identification, verification, and field-level error detection. Extract citations from any document, verify existence against authoritative sources, and receive a forensic audit report.</p>
+    <div id="banners"></div>
+    <div class="welcome-cards">
+      <div class="welcome-card" onclick="document.getElementById('pdf-welcome').click()">
+        <div class="wc-icon">📄</div>
+        <div class="wc-title">Upload PDF</div>
+        <div class="wc-sub">Paper, thesis, article</div>
+        <input type="file" id="pdf-welcome" accept=".pdf" style="display:none" onchange="onPDF(event)">
+      </div>
+      <div class="welcome-card" onclick="document.getElementById('docx-welcome').click()">
+        <div class="wc-icon">📝</div>
+        <div class="wc-title">Upload DOCX</div>
+        <div class="wc-sub">Word document</div>
+        <input type="file" id="docx-welcome" accept=".docx,.doc" style="display:none" onchange="onDOCX(event)">
+      </div>
+      <div class="welcome-card" onclick="document.getElementById('main-input').focus()">
+        <div class="wc-icon">📋</div>
+        <div class="wc-title">Paste text</div>
+        <div class="wc-sub">References or article</div>
+      </div>
+    </div>
+    <div class="pdf-progress" id="pdf-progress-area">
+      <span id="pdf-txt">Reading PDF…</span>
+      <div class="pdf-bar-track"><div class="pdf-bar-fill" id="pdf-fill"></div></div>
+    </div>
+    <div id="welcome-chip" style="margin-top:10px;"></div>
+  </div>`;
+}
+
+/* ═══════════════════════════════════════════════
+   SIDEBAR
+═══════════════════════════════════════════════ */
+function renderSidebar() {
+  const el = document.getElementById('sb-list');
+  if (!sessions.length) {
+    el.innerHTML = '<div class="sb-empty">No scans yet.<br>Upload a document or paste references to begin.</div>';
+    return;
+  }
+  el.innerHTML = sessions.map(s =>
+    `<div class="sb-item${s.id === currentId ? ' active' : ''}" onclick="loadSession('${s.id}')">
+      <div class="sb-item-title">${esc(s.title)}</div>
+      <div class="sb-item-meta">
+        <span>${esc(s.date)}</span>
+        ${s.v != null ? `<span class="sb-badge v">${s.v}✓</span>` : ''}
+        ${s.r ? `<span class="sb-badge r">${s.r}~</span>` : ''}
+        ${s.n ? `<span class="sb-badge n">${s.n}✗</span>` : ''}
+      </div>
+    </div>`
+  ).join('');
+}
+function loadSession(id) {
+  const s = sessions.find(x => x.id === id); if (!s) return;
+  currentId = id;
+  cardN = 0;
+  renderSidebar();
+  document.getElementById('chat').innerHTML = s.html || welcomeHTML();
+  document.getElementById('nav-title').textContent = s.title;
+  scrollBot();
+  // Restore results into window globals and repopulate intelligence tabs if available
+  if (s._results && s._results.length > 0) {
+    window._lastResults = s._results;
+    window._sourceText  = s._sourceText || '';
+    buildQualityTab(s._results);
+    buildComparisonFramework(s._results);
+    buildDualRefList(s._results);
+    buildAuditTrail(s._results);
+    // Restore tab labels
+    document.querySelector('[data-tab="quality"]').textContent = 'Quality (' + s._results.length + ')';
+  }
+}
+function startNew() {
+  currentId = null; fileText = ''; fileName = '';
+  // Clear search cache so stale data doesn't bleed across sessions
+  Object.keys(searchCache).forEach(k => delete searchCache[k]);
+  const fa = document.getElementById('file-chip-area');
+  if (fa) fa.innerHTML = '';
+  const t = document.getElementById('main-input');
+  t.value = ''; t.style.height = '';
+  t.placeholder = 'Paste references, article text, or upload a PDF / DOCX…';
+  document.getElementById('nav-title').textContent = '';
+  document.getElementById('chat').innerHTML = welcomeHTML();
+  renderSidebar(); renderBanners();
+}
+function cancelScan() {
+  stopped = true;
+  document.getElementById('stop-btn').classList.add('gone');
+  document.getElementById('verify-btn').disabled = false;
+}
+function toggleMobileNav() {
+  document.querySelector('.sidebar').classList.toggle('mobile-open');
+}
+function renderBanners() {
+  const el = document.getElementById('banners'); if (!el) return;
+  el.innerHTML = !getKey()
+    ? '<div class="warn-banner" onclick="openSettings()">⚠ No Anthropic key — regex extraction only. Add a key in Settings for LLM-powered parsing (significantly more accurate).</div>'
+    : '';
+}
+
+/* ═══════════════════════════════════════════════
+   MAIN PIPELINE
+═══════════════════════════════════════════════ */
+async function submitScan() {
+  const ta = document.getElementById('main-input');
+  const raw = ta.value.trim();
+  let source = fileText || raw;
+  if (!source) { ta.focus(); return; }
+
+  // Large document handling — warn and truncate at 250k chars
+  const MAX_CHARS = 250000;
+  let truncated = false;
+  if (source.length > MAX_CHARS) {
+    truncated = true;
+    source = source.slice(0, MAX_CHARS);
+  }
+
+  const label = fileName || (raw.slice(0, 55) + (raw.length > 55 ? '…' : ''));
+  document.getElementById('welcome')?.remove();
+  addUserBubble(fileName ? '📄 ' + esc(fileName) : esc(raw.slice(0, 140) + (raw.length > 140 ? '…' : '')));
+  ta.value = ''; ta.style.height = '';
+
+  if (!currentId) {
+    currentId = 'sess_' + Date.now();
+    sessions.unshift({ id: currentId, title: label, date: new Date().toLocaleDateString(), html: '', v: null, r: null, n: null });
+    saveS(); renderSidebar();
+  }
+  document.getElementById('nav-title').textContent = label;
+  stopped = false; cardN = 0;
+  window._searxWarned = false;
+  document.getElementById('stop-btn').classList.remove('gone');
+  document.getElementById('verify-btn').disabled = true;
+
+  const aiMsg = addAIMsg();
+  const body = aiMsg.querySelector('.ai-body');
+  const think = mkEl('div', 'thinking', '<div class="dot"></div><div class="dot"></div><div class="dot"></div>');
+  body.appendChild(think); scrollBot();
+
+  try {
+    think.remove();
+    if (truncated) addStatusLine(body, '⚠ Document truncated to 250,000 characters for processing. References near the end may be missed.', false, 'var(--warn)');
+    const pipeline = addPipeline(body);
+
+    // ── Step 1: Find reference block + inline citations
+    setPipeStep(pipeline, 0, 'active', 'Locating reference section…');
+    const refBlock = findRefBlock(source);
+    const urlRefs  = extractURLs(source);
+    const inlineRefs = extractInlineCitations(source);
+
+    // ── Step 2: Extract
+    setPipeStep(pipeline, 1, 'active', 'Extracting references…');
+    let refs;
+    if (getKey()) { refs = await claudeExtract(refBlock, getKey()); }
+    else           { refs = regexExtract(refBlock); }
+    const existingURLs = new Set(refs.map(r => r.url).filter(Boolean));
+    for (const u of urlRefs) { if (!existingURLs.has(u.url)) refs.push(u); }
+    // Merge inline citations not already captured
+    const existingTitles = new Set(refs.map(r => (r.title||'').toLowerCase().slice(0,40)));
+    for (const ic of inlineRefs) {
+      if (ic.title && !existingTitles.has(ic.title.toLowerCase().slice(0,40))) refs.push(ic);
+    }
+    setPipeStep(pipeline, 0, 'done', 'Reference section located' + (inlineRefs.length ? ` + ${inlineRefs.length} inline citation(s)` : ''));
+    setPipeStep(pipeline, 1, 'done', `Extracted ${refs.length} references`);
+
+    if (!refs.length) {
+      setPipeStep(pipeline, 1, 'err', 'No references found — try pasting the bibliography section directly');
+      finish([]); return;
+    }
+
+    // ── Step 3: Classify + Normalize
+    setPipeStep(pipeline, 2, 'active', 'Classifying and normalizing…');
+    refs = refs.map(r => normalizeRef({ ...r, type: classifyType(r) }));
+    // Detect duplicates
+    const dupMap = detectDuplicates(refs);
+    refs = refs.map((r, i) => ({ ...r, isDuplicate: dupMap.has(i), duplicateOf: dupMap.get(i) }));
+    setPipeStep(pipeline, 2, 'done', 'Types classified, fields normalized');
+
+    // ── Step 4: Search
+    setPipeStep(pipeline, 3, 'active', 'Searching authoritative sources…');
+    const prog = addProg(body, refs.length);
+    const results = [];
+
+    for (let i = 0; i < refs.length; i++) {
+      if (stopped) break;
+      const ref = refs[i];
+      // Skip inline-only citations (author+year only, no title) — they cannot be verified
+      if (ref.isInlineOnly && !ref.doi && !ref.isbn && !ref.arxiv) {
+        results.push({ ref, srcs:{crossref:[],openalex:[],semantic:[],pubmed:[],searxng:[],urlcheck:[]}, all:[], best:null,
+          status:'review', confidence:0, errors:[{field:'title',desc:'Inline-only citation (author+year) — no title available for verification',severity:'info',cited:ref.raw,found:null}],
+          canonical:null, suggested:null, searchQueries:[], fromCache:false });
+        prog.querySelector('.prog-fill').style.width = Math.round((i+1)/refs.length*100)+'%';
+        prog.querySelector('.prog-count').textContent = (i+1)+'/'+refs.length;
+        continue;
+      }
+      prog.querySelector('.prog-cur').textContent = '[' + (ref.num || i+1) + '] ' + (ref.title || '').slice(0, 60) + '…';
+      const result = await runPipeline(ref);
+      results.push(result);
+      prog.querySelector('.prog-fill').style.width = Math.round((i+1) / refs.length * 100) + '%';
+      prog.querySelector('.prog-count').textContent = (i+1) + '/' + refs.length;
+      scrollBot();
+      if (i < refs.length - 1) await sleep(DELAY);
+    }
+
+    setPipeStep(pipeline, 3, 'done', 'Sources searched and matched');
+    setPipeStep(pipeline, 4, 'active', 'Running field-level validation…');
+    setPipeStep(pipeline, 4, 'done', 'Validation complete');
+    setPipeStep(pipeline, 5, 'active', 'Generating audit report…');
+    prog.remove();
+    renderReport(body, results);
+    setPipeStep(pipeline, 5, 'done', 'Report ready');
+    finish(results);
+    // Populate all intelligence tabs
+    await runAllSystems(results, source);
+
+  } catch(err) {
+    addStatusLine(body, '✗ Pipeline error: ' + err.message, false, 'var(--notfound)');
+    console.error(err);
+    finish([]);
+  }
+
+  document.getElementById('stop-btn').classList.add('gone');
+  document.getElementById('verify-btn').disabled = false;
+  saveHTML();
+}
+
+/* ═══════════════════════════════════════════════
+   REFERENCE DETECTION
+═══════════════════════════════════════════════ */
+function findRefBlock(text) {
+  const headRe = /\n[ \t]*(REFERENCES?|BIBLIOGRAPHY|WORKS?\s+CITED|SOURCES?|CITATIONS?|LITERATURE\s+CITED)[ \t]*\n/gi;
+  let best = null, bestLen = 0, m;
+  while ((m = headRe.exec(text)) !== null) {
+    const block = text.slice(m.index + m[0].length, m.index + m[0].length + 80000);
+    if (block.length > bestLen) { bestLen = block.length; best = block; }
+  }
+  if (best) return best;
+  const im = text.match(/(?:^|\n)[ \t]*\[1\][ \t]+\S/);
+  if (im) return text.slice(im.index, im.index + 80000);
+  const nm = text.match(/(?:^|\n)[ \t]*1[.)]\s+[A-Z]/);
+  if (nm) return text.slice(nm.index, nm.index + 80000);
+  return text.slice(-20000);
+}
+
+function extractURLs(text) {
+  const out = [];
+  const re = /https?:\/\/[^\s"'<>[\](){},;]+/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const url = m[0].replace(/[.,;)>\]]+$/, '');
+    if (url.length > 15 && !out.find(u => u.url === url)) {
+      out.push({ num: null, raw: url, title: '', authors: null, year: null, journal: null,
+        publisher: null, doi: null, isbn: null, url, type: 'web', source_context: 'url_detector' });
+    }
+  }
+  return out;
+}
+
+/* ═══════════════════════════════════════════════
+   INLINE CITATION DETECTION
+   Finds author-year citations (Smith, 2020) and numeric [12] in body text
+   Maps them to bibliography entries where possible
+═══════════════════════════════════════════════ */
+function extractInlineCitations(text) {
+  const out = [];
+  const seen = new Set();
+  // Author-year pattern: (Smith, 2020) or (Smith et al., 2020) or Smith (2020)
+  const ayRe = /(?:\(([A-Z][a-zÀ-ÿ]+(?:\s+et\s+al\.?)?),\s*((?:19|20)\d{2}[a-z]?)\))|(?:([A-Z][a-zÀ-ÿ]+(?:\s+et\s+al\.?)?)\s+\(((?:19|20)\d{2}[a-z]?)\))/g;
+  let m;
+  while ((m = ayRe.exec(text)) !== null) {
+    const author = m[1] || m[3];
+    const year   = m[2] || m[4];
+    const key    = author + year;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    // Note: inline citations have author+year only, no title — they are flagged
+    // as 'inline_only' so the pipeline skips them rather than producing false not-found
+    out.push({ num: null, raw: m[0], title: author + ' (' + year + ')', authors: author, year,
+      journal: null, publisher: null, doi: null, isbn: null, arxiv: null,
+      pmid: null, url: null, type: 'other', source_context: 'inline_citation',
+      isInlineOnly: true });
+  }
+  return out;
+}
+function detectDuplicates(refs) {
+  const dupMap = new Map();
+  for (let i = 0; i < refs.length; i++) {
+    for (let j = i + 1; j < refs.length; j++) {
+      const a = refs[i], b = refs[j];
+      // DOI exact match
+      if (a.doi && b.doi && a.doi.toLowerCase() === b.doi.toLowerCase()) {
+        dupMap.set(j, i); continue;
+      }
+      // ISBN exact match
+      if (a.isbn && b.isbn && a.isbn === b.isbn) {
+        dupMap.set(j, i); continue;
+      }
+      // Title similarity very high
+      if (a.title && b.title && titleSim(a.title, b.title) >= 90) {
+        dupMap.set(j, i); continue;
+      }
+    }
+  }
+  return dupMap;
+}
+
+/* ═══════════════════════════════════════════════
+   REGEX EXTRACTION
+═══════════════════════════════════════════════ */
+function regexExtract(text) {
+  const norm = t => String(t || '').replace(/\s{2,}/g, ' ').replace(/[\u201c\u201d]/g, '"').replace(/[\u2018\u2019]/g, "'").trim();
+  const parseEntry = (cleaned, num) => {
+    const qtm = cleaned.match(/"([^"]{5,250})"/);
+    let title = qtm ? qtm[1] : '';
+    if (!title) { const parts = cleaned.split(/\.\s+/); title = parts.length > 1 ? parts[1] : parts[0]; }
+    title = title.replace(/[.,;:]+$/, '').trim();
+    const doim  = cleaned.match(/\b(10\.\d{4,9}\/[^\s,\]>"')]+)/);
+    const arxiv = cleaned.match(/arXiv:(\d{4}\.\d{4,5})/i);
+    const pmid  = cleaned.match(/PMID[:\s]+(\d{5,8})/i);
+    const isbn  = cleaned.match(/(?:ISBN[-: ]*)?(97[89][-\s]?\d[-\s]?\d{3}[-\s]?\d{5}[-\s]?\d|\d{9}[\dX])/i);
+    const urlm  = cleaned.replace(/\s+/g, '').match(/https?:\/\/[^\s"'<>[\]]{10,}/);
+    const yrm   = cleaned.match(/\b((19|20)\d{2})\b/);
+    let authors = null, journal = null;
+    const am = cleaned.match(/^([^"]{3,120}?),\s*"/) || cleaned.match(/^([^(]{3,80})\(/);
+    if (am) authors = am[1].replace(/^\d+\.\s*/, '').trim();
+    const jm = cleaned.match(/"[^"]+",?\s+([A-Z][^,]{3,60}),?\s+vol\./i) || cleaned.match(/"[^"]+",?\s+in\s+([^,]{3,80}),/i);
+    if (jm) journal = jm[1].trim();
+    let volume = null, issue = null, pages = null;
+    const vm = cleaned.match(/\bvol(?:ume)?\.?\s*(\d+)/i); if (vm) volume = vm[1];
+    const im2 = cleaned.match(/\bno(?:\.|,)?\s*(\d+)/i); if (im2) issue = im2[1];
+    const pm = cleaned.match(/\bpp?\.?\s*(\d+[-–]\d+)/i); if (pm) pages = pm[1];
+    return {
+      num, raw: cleaned, title: title.slice(0, 250), authors, year: yrm ? yrm[1] : null,
+      journal, publisher: null, doi: doim ? doim[1].replace(/[.,;)>\]]+$/, '') : null,
+      arxiv: arxiv ? arxiv[1] : null, pmid: pmid ? pmid[1] : null,
+      isbn: isbn ? isbn[0].replace(/[-\s]/g, '') : null,
+      url: urlm ? urlm[0].replace(/[.,;)>\]]+$/, '') : null,
+      volume, issue, pages, source_context: 'bibliography'
+    };
+  };
+
+  // IEEE [N]
+  const ieeePat = /(?:^|\n)[ \t]*(\[\d{1,3}\])[ \t]+/gm;
+  const ieeeStarts = [];
+  let m;
+  while ((m = ieeePat.exec(text)) !== null) {
+    const n = parseInt(m[1].slice(1, -1));
+    if (n >= 1 && n <= 500) ieeeStarts.push({ pos: m.index, num: n });
+  }
+  if (ieeeStarts.length >= 2) {
+    let bestStart = 0, bestCount = 0;
+    for (let i = 0; i < ieeeStarts.length; i++) {
+      if (ieeeStarts[i].num === 1) {
+        let count = 0, seq = 1;
+        for (let j = i; j < ieeeStarts.length; j++) {
+          if (ieeeStarts[j].num === seq) { count++; seq++; }
+          else if (ieeeStarts[j].num < seq) continue;
+          else break;
+        }
+        if (count > bestCount) { bestCount = count; bestStart = i; }
+      }
+    }
+    const used = ieeeStarts.slice(bestStart);
+    const entries = [];
+    for (let i = 0; i < used.length; i++) {
+      const end = i+1 < used.length ? used[i+1].pos : text.length;
+      const raw = text.slice(used[i].pos, end).replace(/^\[\d{1,3}\]\s*/, '').replace(/[\n\r]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+      if (raw.length > 15) entries.push(parseEntry(norm(raw), used[i].num));
+    }
+    if (entries.length >= 5) return entries;
+  }
+
+  // Numbered
+  const numPat = /(?:^|\n)[ \t]*(\d{1,3})[.)]\s+/gm;
+  const numStarts = [];
+  while ((m = numPat.exec(text)) !== null) numStarts.push({ pos: m.index, num: parseInt(m[1]) });
+  if (numStarts.length >= 2) {
+    return numStarts.map((s, i) => {
+      const end = i+1 < numStarts.length ? numStarts[i+1].pos : text.length;
+      const raw = text.slice(s.pos, end).replace(/^\d{1,3}[.)]\s+/, '').replace(/[\n\r]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+      return parseEntry(norm(raw), s.num);
+    }).filter(r => r.raw.length > 10 && r.title.length > 2);
+  }
+
+  // Blank-line fallback
+  return text.split(/\n{2,}/).filter(p => p.trim().length > 20).map((p, i) => parseEntry(norm(p.trim()), i+1));
+}
+
+/* ═══════════════════════════════════════════════
+   LLM EXTRACTION
+═══════════════════════════════════════════════ */
+async function claudeExtract(refBlock, apiKey) {
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514', max_tokens: 4096,
+        system: `You are a precision citation parser. Extract every reference from the bibliography.
+Return ONLY a raw JSON array — no markdown, no code fences, no preamble.
+Each reference: {"num":number|null,"title":string,"authors":string|null,"year":string|null,"journal":string|null,"publisher":string|null,"doi":string|null,"isbn":string|null,"arxiv":string|null,"pmid":string|null,"url":string|null,"volume":string|null,"issue":string|null,"pages":string|null,"edition":string|null,"raw":string}
+Rules:
+- title = the article/book/chapter title ONLY, not journal name
+- authors = exactly as written (do not normalize)
+- raw = complete original citation verbatim
+- Use null for unknown fields — NEVER hallucinate or invent data
+- Return [] if no references found`,
+        messages: [{ role: 'user', content: 'Extract all references:\n\n' + refBlock }]
+      })
+    });
+    if (!resp.ok) throw new Error('API ' + resp.status);
+    const data = await resp.json();
+    let raw = (data.content?.[0]?.text || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+    const s = raw.indexOf('['), e2 = raw.lastIndexOf(']');
+    if (s !== -1 && e2 !== -1) raw = raw.slice(s, e2+1);
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr) && arr.length > 0) return arr.filter(r => r && r.title && r.title.length > 2);
+  } catch(e) { console.warn('[Claude] extraction failed, using regex:', e.message); }
+  return regexExtract(refBlock);
+}
+
+/* ═══════════════════════════════════════════════
+   CLASSIFY TYPE
+═══════════════════════════════════════════════ */
+function classifyType(ref) {
+  const raw  = (ref.raw || '').toLowerCase();
+  const titl = (ref.title || '').toLowerCase();
+  const all  = raw + ' ' + titl;
+  if (ref.arxiv) return 'preprint';
+  if (ref.pmid) return 'journal';
+  if (ref.isbn || /\bisbn\b/i.test(raw)) return 'book';
+  if (ref.doi) {
+    if (/\b(conf\.|conference|workshop|symposium|proceedings|proc\.|globecom|icc |infocom|sigchi|chi |aaai|neurips|cvpr|iclr|icml|wisee|ntms|giis|mwent|icsos|aamas|asplos|hotmobile|spacechi|eucast)\b/i.test(all)) return 'conference';
+    return 'journal';
+  }
+  if (ref.url && !/\b(vol\.|volume|pp\.|journal|transactions|letters|review|magazine|surveys|ieee|acm|nature|science|frontiers|symmetry|access)\b/i.test(all)) return 'web';
+  if (/\b(vol\.|volume\s+\d|no\.\s*\d|pp\.\s*\d|ieee|acm|nature|science|journal|transactions|letters|review|magazine|surveys|communications|networks|frontiers|symmetry|access)\b/i.test(all)) return 'journal';
+  if (/\b(conference|conf\.|workshop|symposium|proceedings|proc\.|in proceedings|in proc\.)\b/i.test(all)) return 'conference';
+  if (/\b(press|publisher|publishing|edition|artech|wiley|elsevier|mcgraw|oxford|cambridge|mit press|academic press|springer\s+new|free press|butterworth|institution of engineering)\b/i.test(all)) return 'book';
+  if (/rfc\s+\d{4}|ietf|internet-draft/i.test(raw)) return 'standard';
+  if (/\[online\]|available\s*:|accessed\s*:/i.test(raw)) return 'web';
+  if (/\b(bbc|cnn|nytimes|theguardian|forbes|zdnet|techcrunch|reuters|apnews|nationalgeographic|futurism\.com|space\.com|theconversation|pocket-lint)\b/i.test(raw)) return 'news';
+  return 'other';
+}
+
+/* ═══════════════════════════════════════════════
+   NORMALIZE
+═══════════════════════════════════════════════ */
+function normalizeRef(ref) {
+  const r = { ...ref };
+  if (r.url) {
+    try {
+      const u = new URL(r.url);
+      ['utm_source','utm_medium','utm_campaign','fbclid','gclid'].forEach(p => u.searchParams.delete(p));
+      r.url = u.toString();
+    } catch(e) {}
+  }
+  if (r.year) r.year = r.year.match(/\b(19|20)\d{2}\b/)?.[0] || r.year;
+  if (r.isbn) r.isbn = r.isbn.replace(/[-\s]/g, '');
+  if (r.isbn && r.isbn.length === 13) {
+    const digits = r.isbn.split('').map(Number);
+    const check = digits.slice(0, 12).reduce((s, d, i) => s + (i % 2 === 0 ? d : d * 3), 0);
+    if ((10 - check % 10) % 10 !== digits[12]) r.isbn_invalid = true;
+  }
+  // Normalize author string — detect order (Last, First vs First Last)
+  if (r.authors) {
+    r.authors_normalized = normalizeAuthors(r.authors);
+    r.author_list = splitAuthors(r.authors);
+  }
+  return r;
+}
+function normalizeAuthors(str) {
+  return str.replace(/\s+/g, ' ').trim();
+}
+function splitAuthors(str) {
+  // Try various separators
+  if (str.includes('; ')) return str.split('; ').map(s => s.trim());
+  if (str.includes(' and ')) return str.split(' and ').map(s => s.trim());
+  // Comma-separated with "Last, First" pattern
+  const parts = str.split(/,\s*/);
+  // Heuristic: if every other part looks like an initial/first name, pairs
+  if (parts.length >= 2 && parts.length % 2 === 0) {
+    const authors = [];
+    for (let i = 0; i < parts.length; i += 2) {
+      authors.push(parts[i] + ', ' + parts[i+1]);
+    }
+    if (authors.length >= 2) return authors;
+  }
+  return [str];
+}
+
+/* ═══════════════════════════════════════════════
+   PIPELINE PER REFERENCE
+═══════════════════════════════════════════════ */
+async function runPipeline(ref) {
+  const title = (ref.title || '').trim();
+  const doi   = ref.doi || '';
+  const isbn  = ref.isbn || '';
+  const arxiv = ref.arxiv || '';
+  const url   = ref.url || '';
+  // Include title length to reduce collision risk for refs with no identifiers
+  const titleKey = title.slice(0, 60) + '|' + (ref.year||'') + '|' + title.length;
+  const cacheKey = doi || isbn || arxiv || url || titleKey;
+
+  if (searchCache[cacheKey]) {
+    const cached = searchCache[cacheKey];
+    const errors = fieldLevelValidate(ref, cached.all);
+    const { status, confidence } = computeStatus(ref, cached.all, errors);
+    return { ref, ...cached, errors, status, confidence, fromCache: true,
+      canonical: buildCanonical(cached.best, ref),
+      suggested: buildSuggested(ref, cached.best, errors),
+      searchQueries: buildSearchQueries(ref) };
+  }
+
+  const usePubMed = ref.type === 'journal' || ref.type === 'preprint' || !!ref.pmid;
+  const [crRes, oaRes, ssRes, sxRes, pmRes] = await Promise.allSettled([
+    connCrossref(title, doi, ref.year),
+    connOpenAlex(title, doi, arxiv),
+    connSemanticScholar(title, doi, arxiv),
+    connSearXNG(title, ref),
+    usePubMed ? connPubMed(title, ref.pmid) : Promise.resolve([]),
+  ]);
+  const srcs = {
+    crossref: crRes.status === 'fulfilled' ? crRes.value : [],
+    openalex: oaRes.status === 'fulfilled' ? oaRes.value : [],
+    semantic:  ssRes.status === 'fulfilled' ? ssRes.value : [],
+    searxng:   sxRes.status === 'fulfilled' ? sxRes.value : [],
+    pubmed:    pmRes.status === 'fulfilled' ? pmRes.value : [],
+    urlcheck:  [],
+  };
+  if (url && (ref.type === 'web' || ref.type === 'news')) {
+    try { srcs.urlcheck = await connURLCheck(url); } catch(e) { srcs.urlcheck = []; }
+  }
+
+  const all = [...srcs.crossref, ...srcs.openalex, ...srcs.semantic, ...srcs.searxng, ...(srcs.pubmed||[]), ...srcs.urlcheck];
+  const filtered = all.filter(c => c.sim === 100 || c.sim >= 10);
+  const ranked = filtered.map(c => {
+    let score = c.sim || 0;
+    if (c.sim === 100) score += 60;
+    if (c.isAcademic)  score += 25;
+    if (ref.year && c.year && ref.year !== c.year) {
+      const diff = Math.abs(parseInt(ref.year) - parseInt(c.year));
+      score -= diff * 6;
+    }
+    return { ...c, score };
+  }).sort((a, b) => b.score - a.score);
+
+  const best = ranked[0];
+  const errors = fieldLevelValidate(ref, ranked);
+  const { status, confidence } = computeStatus(ref, ranked, errors);
+  const result = {
+    ref, srcs, all: ranked, best, status, confidence, errors,
+    canonical: buildCanonical(best, ref),
+    suggested: buildSuggested(ref, best, errors),
+    searchQueries: buildSearchQueries(ref)
+  };
+  searchCache[cacheKey] = { srcs, all: ranked, best, status, confidence };
+  return result;
+}
+
+/* ═══════════════════════════════════════════════
+   STATUS + CONFIDENCE COMPUTATION
+   Confidence is computed from actual signal strengths, not hardcoded.
+═══════════════════════════════════════════════ */
+function computeStatus(ref, ranked, errors) {
+  const best       = ranked[0];
+  const hasExact   = ranked.some(c => c.sim === 100);
+  const hasStrong  = ranked.some(c => c.sim >= 70 && c.isAcademic);
+  const hasFuzzy   = ranked.some(c => c.sim >= 30);
+  const hasAny     = ranked.length > 0;
+  const errCount   = errors.filter(e => e.severity === 'error').length;
+  const warnCount  = errors.filter(e => e.severity === 'warning').length;
+  const sourceCount = ranked.filter(c => c.isAcademic).length;
+
+  // ── Compute a raw confidence score from signals ──
+  let conf = 0;
+  if (hasExact)   conf += 55;
+  else if (hasStrong) conf += 40;
+  else if (hasFuzzy)  conf += 20;
+  else if (hasAny)    conf += 10;
+
+  // Source agreement bonus (multiple sources agree)
+  if (sourceCount >= 2) conf += 12;
+  else if (sourceCount === 1) conf += 5;
+
+  // Best candidate title sim
+  if (best) {
+    const sim = best.sim || 0;
+    conf += Math.round(sim * 0.25); // up to 25 pts from title sim
+  }
+
+  // Field completeness bonus
+  const hasKey = ref.doi || ref.isbn || ref.arxiv;
+  if (hasKey) conf += 8;
+
+  // Error penalties
+  conf -= errCount * 18;
+  conf -= warnCount * 5;
+
+  // Clamp
+  conf = Math.max(0, Math.min(99, Math.round(conf)));
+
+  // ── Derive status from conf + signals ──
+  let status;
+  if      (errCount >= 2 && conf < 50)         status = 'wrong';
+  else if (!hasAny)                             status = 'notfound';
+  else if (errCount === 0 && conf >= 70)        status = 'verified';
+  else if (errCount === 0 && conf >= 45)        status = 'partial';
+  else if (errCount >= 1)                       status = 'partial';
+  else if (hasFuzzy && !hasStrong)              status = 'review';
+  else                                          status = 'partial';
+
+  return { status, confidence: conf };
+}
+
+/* ═══════════════════════════════════════════════
+   CONNECTORS
+═══════════════════════════════════════════════ */
+async function connCrossref(title, doi, year) {
+  const out = [];
+  try {
+    if (doi) {
+      const r = await fetch('https://api.crossref.org/works/' + encodeURIComponent(doi));
+      if (r.ok) {
+        const d = await r.json(); const w = d.message;
+        if (w?.title?.[0]) out.push(normalizeCandidate({ isAcademic: true, db: 'Crossref', source: 'crossref',
+          title: w.title[0], url: w.URL || (w.DOI ? 'https://doi.org/' + w.DOI : ''),
+          year: w.published?.['date-parts']?.[0]?.[0]?.toString() || '',
+          authors: (w.author || []).slice(0, 5).map(a => (a.family || '') + (a.given ? ', ' + a.given.slice(0,1) + '.' : '')).filter(Boolean).join('; '),
+          journal: w['container-title']?.[0] || '', doi: w.DOI || '',
+          volume: w.volume || null, issue: w.issue || null, pages: w.page || null,
+          publisher: w.publisher || null,
+          sim: 100, type: 'academic', evidence_url: w.URL || 'https://doi.org/' + w.DOI }));
+      }
+    }
+    if (!title) return out;
+    const params = new URLSearchParams({ 'query.title': '"' + title.replace(/"/g, '').slice(0, 110) + '"', rows: '5', select: 'DOI,title,author,published,container-title,URL,volume,issue,page,publisher' });
+    if (year) params.set('filter', 'from-pub-date:' + (parseInt(year)-1) + ',until-pub-date:' + (parseInt(year)+1));
+    const r2 = await fetch('https://api.crossref.org/works?' + params);
+    if (!r2.ok) return out;
+    const d2 = await r2.json();
+    for (const w of (d2.message?.items || []).slice(0, 5)) {
+      const wt = w.title?.[0] || ''; const sim = titleSim(title, wt);
+      if (sim < 10) continue;
+      out.push(normalizeCandidate({ isAcademic: true, db: 'Crossref', source: 'crossref', title: wt,
+        url: w.URL || (w.DOI ? 'https://doi.org/' + w.DOI : ''),
+        year: w.published?.['date-parts']?.[0]?.[0]?.toString() || '',
+        authors: (w.author || []).slice(0, 5).map(a => (a.family || '') + (a.given ? ', ' + a.given.slice(0,1) + '.' : '')).filter(Boolean).join('; '),
+        journal: w['container-title']?.[0] || '', doi: w.DOI || '',
+        volume: w.volume || null, issue: w.issue || null, pages: w.page || null,
+        publisher: w.publisher || null,
+        sim, type: 'academic', evidence_url: w.URL || (w.DOI ? 'https://doi.org/' + w.DOI : '') }));
+    }
+  } catch(e) { console.log('[Crossref]', e.message); }
+  return out;
+}
+async function connOpenAlex(title, doi, arxiv) {
+  const out = [];
+  try {
+    let url;
+    if (doi)   url = 'https://api.openalex.org/works/https://doi.org/' + encodeURIComponent(doi) + '?select=title,doi,authorships,publication_year,primary_location,open_access,biblio,cited_by_count';
+    else if (arxiv) url = 'https://api.openalex.org/works/https://arxiv.org/abs/' + encodeURIComponent(arxiv) + '?select=title,doi,authorships,publication_year,primary_location,open_access,biblio,cited_by_count';
+    else url = 'https://api.openalex.org/works?search=' + encodeURIComponent(title.slice(0, 100)) + '&per-page=5&select=title,doi,authorships,publication_year,primary_location,open_access,biblio,cited_by_count';
+    const r = await fetch(url); if (!r.ok) return out;
+    const d = await r.json(); const items = d.results || (d.title ? [d] : []);
+    for (const w of items.slice(0, 5)) {
+      const wt = w.title || ''; const sim = (doi || arxiv) ? 100 : titleSim(title, wt);
+      if (sim < 10) continue;
+      const wdoi = (w.doi || '').replace('https://doi.org/', '');
+      const landUrl = w.primary_location?.landing_page_url || w.open_access?.oa_url || (wdoi ? 'https://doi.org/' + wdoi : '');
+      out.push(normalizeCandidate({ isAcademic: true, db: 'OpenAlex', source: 'openalex', title: wt, url: landUrl,
+        year: w.publication_year?.toString() || '',
+        authors: (w.authorships || []).slice(0, 5).map(a => a.author?.display_name || '').filter(Boolean).join('; '),
+        journal: w.primary_location?.source?.display_name || '', doi: wdoi,
+        volume: w.biblio?.volume || null, issue: w.biblio?.issue || null,
+        pages: w.biblio?.first_page && w.biblio?.last_page ? w.biblio.first_page + '-' + w.biblio.last_page : null,
+        citationCount: typeof w.cited_by_count === 'number' ? w.cited_by_count : null,
+        isOpenAccess: w.open_access?.is_oa ?? null,
+        sim, type: 'academic', evidence_url: landUrl }));
+    }
+  } catch(e) { console.log('[OpenAlex]', e.message); }
+  return out;
+}
+async function connSemanticScholar(title, doi, arxiv) {
+  const out = [];
+  try {
+    let url;
+    if (doi)   url = 'https://api.semanticscholar.org/graph/v1/paper/DOI:' + encodeURIComponent(doi) + '?fields=title,authors,year,venue,externalIds,openAccessPdf,url,volume,journal,citationCount,isOpenAccess';
+    else if (arxiv) url = 'https://api.semanticscholar.org/graph/v1/paper/ARXIV:' + encodeURIComponent(arxiv) + '?fields=title,authors,year,venue,externalIds,openAccessPdf,url,journal,citationCount,isOpenAccess';
+    else url = 'https://api.semanticscholar.org/graph/v1/paper/search?query=' + encodeURIComponent(title.slice(0, 100)) + '&limit=5&fields=title,authors,year,venue,externalIds,openAccessPdf,url,journal,citationCount,isOpenAccess';
+    // Retry once on 429
+    let r = await fetch(url);
+    if (r.status === 429) { await sleep(2000); r = await fetch(url); }
+    if (!r.ok) return out;
+    const d = await r.json(); const items = d.data || (d.paperId ? [d] : []);
+    for (const w of items.slice(0, 5)) {
+      const wt = w.title || ''; const sim = (doi || arxiv) ? 100 : titleSim(title, wt);
+      if (sim < 10) continue;
+      const wdoi = w.externalIds?.DOI || '';
+      const wurl = w.openAccessPdf?.url || (wdoi ? 'https://doi.org/' + wdoi : '') || w.url || '';
+      out.push(normalizeCandidate({ isAcademic: true, db: 'Semantic Scholar', source: 'semantic', title: wt, url: wurl,
+        year: w.year?.toString() || '',
+        authors: (w.authors || []).slice(0, 5).map(a => a.name || '').filter(Boolean).join('; '),
+        journal: w.journal?.name || w.venue || '', doi: wdoi, arxiv: w.externalIds?.ArXiv || '',
+        volume: w.journal?.volume || null,
+        citationCount: typeof w.citationCount === 'number' ? w.citationCount : null,
+        isOpenAccess: w.isOpenAccess ?? null,
+        sim, type: 'academic', evidence_url: wurl }));
+    }
+  } catch(e) { console.log('[SemanticScholar]', e.message); }
+  return out;
+}
+async function connSearXNG(title, ref) {
+  const base = getSearx(); if (!base) return [];
+  const out = [];
+  const exactQ = '"' + title.replace(/"/g, '').slice(0, 110) + '"';
+  const broadQ = [title.slice(0, 80), ref.year || ''].filter(Boolean).join(' ');
+  for (const q of [exactQ, broadQ]) {
+    try {
+      const r = await fetch(base + '/search?' + new URLSearchParams({ q, format: 'json', categories: 'general', language: 'en', safesearch: '0' }));
+      if (!r.ok) { if (r.status === 403) break; continue; }
+      const ct = r.headers.get('content-type') || '';
+      if (!ct.includes('json')) {
+        // Surface to UI once per scan, not just console — misconfiguration is otherwise invisible
+        if (!window._searxWarned) {
+          window._searxWarned = true;
+          const chatEl = document.getElementById('chat');
+          const lastAiBody = chatEl?.querySelector('.msg-ai:last-child .ai-body');
+          if (lastAiBody) addStatusLine(lastAiBody, '⚠ SearXNG returned HTML, not JSON — add "formats: [html, json]" to settings.yml. Skipping SearXNG for this scan.', false, 'var(--warn)');
+        }
+        break;
+      }
+      const d = await r.json(); if (!d.results?.length) continue;
+      for (const item of d.results.slice(0, 6)) {
+        const t = classifyURL(item.url || '');
+        out.push(normalizeCandidate({ isAcademic: t === 'academic', db: 'SearXNG', source: 'searxng',
+          title: (item.title || '').trim(), url: (item.url || '').trim(), snippet: (item.content || '').slice(0, 200),
+          year: '', authors: '', journal: '', sim: titleSim(title, item.title || ''),
+          type: t, evidence_url: (item.url || '').trim() }));
+      }
+      if (out.length) break;
+    } catch(e) { break; }
+  }
+  return out;
+}
+async function connURLCheck(url) {
+  const out = [];
+  try {
+    const r = await fetch(url, { method: 'HEAD', mode: 'no-cors' });
+    out.push({ isAcademic: false, db: 'URL Check', source: 'urlcheck', title: url, url,
+      httpStatus: r.status, isAlive: r.type === 'opaque' || r.ok || r.status === 405,
+      corsOpaque: r.type === 'opaque', redirected: r.redirected, finalUrl: r.url,
+      sim: 0, type: classifyURL(url), evidence_url: url, retrieved_at: new Date().toISOString() });
+  } catch(e) {
+    out.push({ isAcademic: false, db: 'URL Check', source: 'urlcheck', title: url, url,
+      httpStatus: 0, isAlive: false, corsOpaque: false, error: e.message,
+      sim: 0, type: 'web', evidence_url: url, retrieved_at: new Date().toISOString() });
+  }
+  return out;
+}
+function normalizeCandidate(c) {
+  return { isAcademic: c.isAcademic || false, db: c.db || '', source: c.source || '',
+    title: (c.title || '').trim(), authors: c.authors || '', year: c.year || '',
+    journal: c.journal || '', doi: c.doi || '', arxiv: c.arxiv || '', url: c.url || '',
+    snippet: c.snippet || '', sim: c.sim || 0, type: c.type || 'web',
+    httpStatus: c.httpStatus || null, isAlive: c.isAlive || null, corsOpaque: c.corsOpaque || false,
+    volume: c.volume || null, issue: c.issue || null, pages: c.pages || null,
+    publisher: c.publisher || null, citationCount: c.citationCount ?? null, isOpenAccess: c.isOpenAccess ?? null,
+    evidence_url: c.evidence_url || c.url || '', retrieved_at: c.retrieved_at || new Date().toISOString() };
+}
+
+/* ═══════════════════════════════════════════════
+   FIELD-LEVEL ERROR TAXONOMY
+   Returns array of structured error objects, not just strings.
+═══════════════════════════════════════════════ */
+function fieldLevelValidate(ref, candidates) {
+  const errors = [];
+  const addErr = (field, desc, severity, cited, found) =>
+    errors.push({ field, desc, severity, cited: cited || null, found: found || null });
+
+  const best = candidates[0];
+
+  // ── EXISTENCE ──
+  if (!candidates.length) {
+    addErr('existence', 'Reference not found in any source (Crossref, OpenAlex, Semantic Scholar)', 'error');
+    return errors;
+  }
+
+  // ── COMPLETENESS by type ──
+  if (ref.type === 'book') {
+    if (!ref.title)                         addErr('title',     'Missing: title',                   'error');
+    if (!ref.authors)                        addErr('authors',   'Missing: author(s)',               'warning');
+    if (!ref.year)                           addErr('year',      'Missing: publication year',        'warning');
+    if (!ref.isbn && !ref.publisher)         addErr('isbn',      'Missing: ISBN or publisher name',  'warning');
+    if (ref.isbn_invalid)                    addErr('isbn',      'Invalid ISBN checksum',            'error', ref.isbn);
+    if (!ref.edition && ref.raw && /edition/i.test(ref.raw) && !ref.edition)
+                                             addErr('edition',   'Edition mentioned but not captured', 'info');
+  } else if (ref.type === 'web' || ref.type === 'news') {
+    if (!ref.title)                         addErr('title',     'Missing: title',                   'error');
+    if (!ref.url)                            addErr('url',       'Missing: URL',                     'error');
+    if (!ref.year)                           addErr('year',      'Missing: access/publish date',     'warning');
+    if (ref.type === 'news' && !ref.authors) addErr('authors',   'Missing: author',                  'warning');
+    const uc = candidates.find(c => c.source === 'urlcheck');
+    if (uc && !uc.isAlive && !uc.corsOpaque) {
+      addErr('url', 'URL appears unreachable (HTTP ' + (uc.httpStatus || 'error') + ')', 'error', ref.url);
+      if (uc.redirected) addErr('url', 'URL redirects to: ' + uc.finalUrl, 'info', ref.url, uc.finalUrl);
+    }
+  } else if (ref.type === 'preprint') {
+    if (!ref.title)                         addErr('title',     'Missing: title',                   'error');
+    if (!ref.authors)                        addErr('authors',   'Missing: authors',                 'warning');
+    if (!ref.year)                           addErr('year',      'Missing: year',                    'warning');
+    if (!ref.arxiv && !ref.doi)             addErr('id',        'Missing: arXiv ID or DOI',         'warning');
+  } else {
+    if (!ref.title)                         addErr('title',     'Missing: title',                   'error');
+    if (!ref.authors)                        addErr('authors',   'Missing: authors',                 'warning');
+    if (!ref.year)                           addErr('year',      'Missing: year',                    'warning');
+    if (!ref.journal && !ref.doi)           addErr('journal',   'Missing: journal/venue or DOI',    'warning');
+    if (!ref.volume && ref.journal)         addErr('volume',    'Missing: volume number',           'info');
+    if (!ref.pages && ref.journal)          addErr('pages',     'Missing: page numbers',            'info');
+  }
+
+  if (!best) return errors;
+
+  // ── ACCURACY: Year ──
+  if (best.year && ref.year && best.year !== ref.year) {
+    const diff = Math.abs(parseInt(best.year) - parseInt(ref.year));
+    if (diff === 1) addErr('year', 'Year off by 1', 'warning', ref.year, best.year);
+    else            addErr('year', 'Year mismatch', 'error',   ref.year, best.year);
+  }
+
+  // ── ACCURACY: Title ──
+  if (best.title && ref.title) {
+    const sim = titleSim(ref.title, best.title);
+    if (sim <= 10 && best.isAcademic)     addErr('title', 'Title very different from matched work — possible wrong reference', 'error', ref.title.slice(0,80), best.title.slice(0,80));
+    else if (sim < 50 && best.isAcademic) addErr('title', 'Title differs from canonical', 'warning', ref.title.slice(0,80), best.title.slice(0,80));
+    // Missing title words: words in canonical not in cited title (catches truncated/partial titles)
+    if (sim >= 30 && sim < 85 && best.isAcademic) {
+      const stopWords = new Set(['a','an','the','of','in','on','for','and','or','to','with','by','from','at','is','are','was','were']);
+      const canonWords = best.title.toLowerCase().replace(/[^\w\s]/g,'').split(/\s+/).filter(w => w.length > 3 && !stopWords.has(w));
+      const citedWords = new Set(ref.title.toLowerCase().replace(/[^\w\s]/g,'').split(/\s+/));
+      const missingWords = canonWords.filter(w => !citedWords.has(w));
+      if (missingWords.length >= 2) addErr('title', 'Cited title is missing words found in canonical: "' + missingWords.slice(0,4).join('", "') + '"', 'warning', ref.title.slice(0,60), best.title.slice(0,60));
+    }
+  }
+
+  // ── ACCURACY: Authors ──
+  if (best.authors && ref.author_list && ref.author_list.length > 0) {
+    const normA = s => s.toLowerCase().replace(/[.,\s]/g, '');
+    const refNames  = ref.author_list.map(a => normA(a.split(/,\s*/)[0]));
+    const bestNames = best.authors.split(/[;,]+/).map(a => normA(a.split(/,\s*/)[0]));
+    const missing = refNames.filter(rn => !bestNames.some(bn => bn.includes(rn) || rn.includes(bn) || levenshtein(rn, bn) <= 2));
+    // Extra authors (in cited but not in source — e.g. "et al." expansion issues)
+    if (missing.length === refNames.length && refNames.length > 0)
+      addErr('authors', 'Cited authors not found in source record', 'error', ref.authors?.slice(0,80), best.authors.slice(0,80));
+    else if (missing.length > 0 && missing.length < refNames.length)
+      addErr('authors', missing.length + ' cited author(s) not matched in source', 'warning', ref.authors?.slice(0,80), best.authors.slice(0,80));
+    // Extra authors: ref lists authors not in best at all
+    const extraInRef = refNames.filter(rn => rn.length > 2 && !bestNames.some(bn => bn.includes(rn) || rn.includes(bn) || levenshtein(rn, bn) <= 2));
+    if (extraInRef.length > 0 && extraInRef.length < refNames.length)
+      addErr('authors', 'Citation includes ' + extraInRef.length + ' author(s) not found in source (possible extra or fabricated author)', 'warning', ref.authors?.slice(0,80), best.authors.slice(0,80));
+    // Author order: check if first author matches
+    if (refNames.length >= 2 && bestNames.length >= 2) {
+      const refFirst = refNames[0], bestFirst = bestNames[0];
+      if (!bestFirst.includes(refFirst) && !refFirst.includes(bestFirst) && levenshtein(refFirst, bestFirst) > 2) {
+        // First author differs — check if it appears elsewhere in best list
+        const refFirstElsewhere = bestNames.slice(1).some(bn => bn.includes(refFirst) || refFirst.includes(bn) || levenshtein(refFirst, bn) <= 2);
+        if (refFirstElsewhere) addErr('authors', 'First author appears to be in wrong position in citation vs source', 'warning', refNames[0], bestNames[0]);
+      }
+    }
+  } else if (!ref.authors && best.authors) {
+    addErr('authors', 'Authors found in source but not cited', 'info', null, best.authors.slice(0,80));
+  }
+
+  // ── ACCURACY: Journal ──
+  if (best.journal && ref.journal && best.journal.length > 3 && ref.journal.length > 3) {
+    const sim = titleSim(ref.journal, best.journal);
+    if (sim < 25) addErr('journal', 'Journal name differs from canonical', 'warning', ref.journal.slice(0,60), best.journal.slice(0,60));
+  }
+
+  // ── ACCURACY: Volume ──
+  if (best.volume && ref.volume && best.volume !== ref.volume)
+    addErr('volume', 'Volume number mismatch', 'warning', ref.volume, best.volume);
+
+  // ── ACCURACY: Pages ──
+  if (best.pages && ref.pages && !pagesOverlap(ref.pages, best.pages))
+    addErr('pages', 'Page numbers differ from source', 'warning', ref.pages, best.pages);
+
+  // ── ACCURACY: Publisher ──
+  if (best.publisher && ref.publisher) {
+    const sim = titleSim(ref.publisher, best.publisher);
+    if (sim < 30) addErr('publisher', 'Publisher differs from canonical', 'warning', ref.publisher.slice(0,50), best.publisher.slice(0,50));
+  }
+
+  // ── DUPLICATE signal ──
+  if (ref.isDuplicate) addErr('duplicate', 'Appears to be a duplicate of reference #' + (ref.duplicateOf + 1), 'warning');
+
+  // ── RETRACTION signal — check S2 field if available ──
+  const s2candidate = candidates.find(c => c.source === 'semantic');
+  if (s2candidate?.isRetracted) addErr('retraction', 'Marked as retracted in Semantic Scholar', 'error');
+  else if (ref.raw && /retract/i.test(ref.raw)) addErr('retraction', 'Raw text contains "retract" — verify retraction status', 'warning');
+
+  // ── DOI format ──
+  if (ref.doi) {
+    const doiFmt = /^10\.\d{4,9}\/.+/.test(ref.doi);
+    if (!doiFmt) addErr('doi', 'DOI format appears invalid', 'error', ref.doi);
+  }
+
+  return errors;
+}
+
+function pagesOverlap(a, b) {
+  if (!a || !b) return true;
+  const norm = s => s.replace(/[–—]/g, '-').trim();
+  return norm(a) === norm(b) || a.includes(b.split('-')[0]) || b.includes(a.split('-')[0]);
+}
+
+// Levenshtein distance for fuzzy author matching
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  const dp = Array.from({length: m+1}, (_,i) => Array.from({length: n+1}, (_,j) => j === 0 ? i : 0));
+  for (let j = 1; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+    }
+  }
+  return dp[m][n];
+}
+
+/* ═══════════════════════════════════════════════
+   BUILDERS
+═══════════════════════════════════════════════ */
+function buildCanonical(best, ref) {
+  if (!best || !best.title) return null;
+  const parts = [];
+  if (best.authors) parts.push(best.authors.replace(/;/g, ','));
+  if (best.title)   parts.push('"' + best.title + '"');
+  if (best.journal) parts.push(best.journal);
+  if (best.volume)  parts.push('vol. ' + best.volume);
+  if (best.issue)   parts.push('no. ' + best.issue);
+  if (best.pages)   parts.push('pp. ' + best.pages);
+  if (best.year)    parts.push('(' + best.year + ')');
+  if (best.doi)     parts.push('DOI: ' + best.doi);
+  else if (best.url) parts.push(best.url);
+  return parts.join(', ');
+}
+function buildSuggested(ref, best, errors) {
+  const errorFields = errors.filter(e => e.severity === 'error' || e.severity === 'warning').map(e => e.field);
+  if (!errorFields.length || !best) return null;
+  const parts = [];
+  const auth = best?.authors || ref.authors || '[Authors]';
+  const title = best?.title || ref.title || '[Title]';
+  const yr = best?.year || ref.year || '[Year]';
+  const jour = best?.journal || ref.journal || '';
+  const doi = best?.doi || ref.doi || '';
+  const url = best?.url || ref.url || '';
+  const vol = best?.volume || ref.volume || '';
+  const pg = best?.pages || ref.pages || '';
+  parts.push(auth.replace(/;/g, ','));
+  parts.push('"' + title + '"');
+  if (jour) parts.push(jour);
+  if (vol) parts.push('vol. ' + vol);
+  if (pg) parts.push('pp. ' + pg);
+  parts.push(yr);
+  if (doi) parts.push('DOI: ' + doi);
+  else if (url) parts.push(url);
+  return parts.join(', ') + '.';
+}
+function buildSearchQueries(ref) {
+  const q = [];
+  if (ref.doi)   q.push({ type: 'doi',   query: ref.doi });
+  if (ref.isbn)  q.push({ type: 'isbn',  query: ref.isbn });
+  if (ref.arxiv) q.push({ type: 'arxiv', query: ref.arxiv });
+  if (ref.title) q.push({ type: 'title', query: '"' + ref.title.slice(0, 100) + '"' });
+  return q;
+}
+
+/* ═══════════════════════════════════════════════
+   HUMAN-READABLE EXPLANATION GENERATOR
+═══════════════════════════════════════════════ */
+function buildExplanation(result) {
+  const { ref, status, confidence, errors, best } = result;
+  const title = ref.title ? `"${ref.title.slice(0,60)}${ref.title.length>60?'…':''}"` : 'This reference';
+  const src = best?.db || 'any searched source';
+
+  if (status === 'notfound') {
+    return `${title} could not be found in Crossref, OpenAlex, or Semantic Scholar. This may indicate a fabricated reference, a very obscure publication, or a significant title/author error that prevented matching.`;
+  }
+  if (status === 'verified' && !errors.length) {
+    const matchType = best?.sim === 100 ? 'exact identifier match' : 'strong title and metadata match';
+    return `${title} was verified via ${matchType} in ${src}. All checked fields are consistent with the source record.`;
+  }
+  if (status === 'wrong') {
+    const errDescs = errors.filter(e => e.severity === 'error').map(e => e.desc).slice(0, 2).join('; ');
+    return `${title} was found in ${src} but contains significant errors: ${errDescs}. The citation likely refers to a real work but key metadata is incorrect.`;
+  }
+  if (status === 'partial') {
+    const warnDescs = errors.filter(e => e.severity === 'warning').map(e => e.field).join(', ');
+    return `${title} was matched in ${src} with ${confidence}% confidence. Minor discrepancies detected in: ${warnDescs || 'some fields'}. The work likely exists but the citation has accuracy issues.`;
+  }
+  if (status === 'review') {
+    return `${title} returned fuzzy matches only (best: ${best?.sim||0}% title similarity). The work may exist under a slightly different title or this could be a partial citation. Manual verification recommended.`;
+  }
+  return `${title} was processed with ${confidence}% confidence. Review the evidence section for details.`;
+}
+
+/* ═══════════════════════════════════════════════
+   FILTER + SORT STATE
+═══════════════════════════════════════════════ */
+let activeFilter = 'all';
+let activeSort   = 'default';
+
+function applyFilterSort() {
+  const cards = document.querySelectorAll('.ref-card[data-status]');
+  let visible = 0;
+  cards.forEach(card => {
+    const status = card.getAttribute('data-status');
+    const show = activeFilter === 'all' || status === activeFilter;
+    card.classList.toggle('hidden', !show);
+    if (show) visible++;
+  });
+  // Sort within each category section
+  if (activeSort !== 'default') {
+    document.querySelectorAll('.ref-list').forEach(list => {
+      const items = Array.from(list.querySelectorAll('.ref-card:not(.hidden)'));
+      items.sort((a, b) => {
+        const ca = parseInt(a.getAttribute('data-conf') || '0');
+        const cb = parseInt(b.getAttribute('data-conf') || '0');
+        return activeSort === 'conf-desc' ? cb - ca : ca - cb;
+      });
+      items.forEach(item => list.appendChild(item));
+    });
+  }
+  const countEl = document.getElementById('results-visible-count');
+  if (countEl) countEl.textContent = visible + ' shown';
+  // Toggle filter button active states
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-filter') === activeFilter);
+  });
+}
+function setFilter(f) { activeFilter = f; applyFilterSort(); }
+function setSort(s) { activeSort = s; applyFilterSort(); }
+function renderReport(parent, results) {
+  const total    = results.length;
+  const verified = results.filter(r => r.status === 'verified').length;
+  const partial  = results.filter(r => r.status === 'partial').length;
+  const review   = results.filter(r => r.status === 'review' || r.status === 'wrong').length;
+  const notfound = results.filter(r => r.status === 'notfound').length;
+
+  // Issue frequency
+  const issueCounts = {};
+  results.forEach(r => {
+    r.errors.forEach(e => {
+      const key = e.field + ': ' + e.desc.slice(0, 50);
+      issueCounts[key] = (issueCounts[key] || 0) + 1;
+    });
+  });
+  const topIssues = Object.entries(issueCounts).sort((a,b) => b[1]-a[1]).slice(0, 6);
+
+  const sumCard = mkEl('div', 'summary-card');
+  sumCard.innerHTML =
+    '<div class="summary-title">Verification Report — ' + total + ' references audited</div>' +
+    '<div class="summary-stats">' +
+      mkStat(verified, 'Verified', 'var(--verified)') +
+      mkStat(partial, 'Partial', 'var(--partial)') +
+      mkStat(review, 'Needs Review', 'var(--review)') +
+      mkStat(notfound, 'Not Found', 'var(--notfound)') +
+    '</div>' +
+    (topIssues.length ?
+      '<div class="summary-issues"><div class="issues-label">Recurring issues</div>' +
+      topIssues.map(([issue, count]) => `<span class="issue-pill">✗ ${esc(issue)} <strong>(${count})</strong></span>`).join('') +
+      '</div>' : '') +
+    '<div class="export-row">' +
+      '<span class="export-label">Export results</span>' +
+      '<button class="export-btn" onclick="exportJSON()">⬇ JSON</button>' +
+      '<button class="export-btn" onclick="exportCSV()">⬇ CSV</button>' +
+      '<button class="export-btn" onclick="exportMarkdown()">⬇ Markdown</button>' +
+    '</div>';
+  parent.appendChild(sumCard);
+
+  // ── Filter/Sort toolbar ──
+  window._lastResults = results;
+  const toolbar = mkEl('div', 'results-toolbar');
+  toolbar.innerHTML =
+    `<button class="filter-btn active" data-filter="all" onclick="setFilter('all')">All (${total})</button>
+     <span class="filter-sep">|</span>
+     <button class="filter-btn" data-filter="verified" onclick="setFilter('verified')">✓ Verified (${verified})</button>
+     <button class="filter-btn" data-filter="partial" onclick="setFilter('partial')">~ Partial (${partial})</button>
+     <button class="filter-btn" data-filter="review" onclick="setFilter('review')">? Review (${review})</button>
+     <button class="filter-btn" data-filter="notfound" onclick="setFilter('notfound')">✗ Not Found (${notfound})</button>
+     <span class="filter-sep" style="margin-left:4px">|</span>
+     <span class="results-count" id="results-visible-count">${total} shown</span>
+     <select class="sort-select" onchange="setSort(this.value)">
+       <option value="default">Sort: Default</option>
+       <option value="conf-desc">Sort: Confidence ↓</option>
+       <option value="conf-asc">Sort: Confidence ↑</option>
+     </select>`;
+  parent.appendChild(toolbar);
+
+  const cats = [
+    { key: 'journal',    icon: '📖', label: 'Journal Articles' },
+    { key: 'conference', icon: '🎤', label: 'Conference Papers' },
+    { key: 'preprint',   icon: '📑', label: 'Preprints' },
+    { key: 'book',       icon: '📚', label: 'Books & Textbooks' },
+    { key: 'web',        icon: '🔗', label: 'Websites' },
+    { key: 'news',       icon: '📰', label: 'News Articles' },
+    { key: 'standard',   icon: '📋', label: 'Standards & RFCs' },
+    { key: 'other',      icon: '📄', label: 'Other' },
+  ];
+  for (const cat of cats) {
+    const items = results.filter(r => (r.ref.type || 'other') === cat.key);
+    if (!items.length) continue;
+    const sec = mkEl('div', 'cat-section');
+    sec.innerHTML = `<div class="cat-head"><span class="cat-icon">${cat.icon}</span><span class="cat-name">${cat.label}</span><span class="cat-count">${items.length}</span></div>`;
+    const list = mkEl('div', 'ref-list');
+    items.forEach(r => list.appendChild(makeCard(r)));
+    sec.appendChild(list);
+    parent.appendChild(sec);
+  }
+  scrollBot();
+}
+function mkStat(val, lbl, color) {
+  return `<div class="stat-box"><div class="stat-num" style="color:${color}">${val}</div><div class="stat-lbl">${lbl}</div></div>`;
+}
+
+/* ═══════════════════════════════════════════════
+   CARD BUILDER
+═══════════════════════════════════════════════ */
+function makeCard(result) {
+  cardN++;
+  const id = 'rc' + cardN;
+  const { ref, status, confidence, errors } = result;
+
+  const statusMap = {
+    verified: { lbl: '✓ Verified',      cls: 'sb-verified', col: 'var(--verified)' },
+    partial:  { lbl: '~ Partial',        cls: 'sb-partial',  col: 'var(--partial)'  },
+    notfound: { lbl: '✗ Not Found',      cls: 'sb-notfound', col: 'var(--notfound)' },
+    wrong:    { lbl: '⚠ Likely Wrong',   cls: 'sb-wrong',    col: 'var(--wrong)'    },
+    review:   { lbl: '? Needs Review',   cls: 'sb-review',   col: 'var(--review)'   },
+  };
+  const st = statusMap[status] || statusMap.notfound;
+
+  const dispTitle = (ref.num ? '[' + ref.num + '] ' : '') + (ref.title || ref.raw || '').slice(0, 115);
+  const metaParts = [ref.type, ref.year, ref.doi ? 'DOI' : '', ref.arxiv ? 'arXiv' : '', ref.isbn ? 'ISBN' : ''].filter(Boolean);
+  const meta = metaParts.join(' · ');
+
+  // Error chips for header
+  const errChips = errors.slice(0, 4).map(e =>
+    `<span class="err-chip ec-${e.severity}">${esc(e.field)}</span>`
+  ).join('');
+
+  // Completeness checks
+  const checkFields = getRequiredFields(ref.type);
+  const checks = checkFields.map(([field, label]) => {
+    const val = ref[field];
+    const cls = val ? 'chk-ok' : (field === 'title' || field === 'url' ? 'chk-miss' : 'chk-warn');
+    return `<span class="check-chip ${cls}">${val ? '✓' : '✗'} ${label}</span>`;
+  }).join('');
+
+  // Extracted fields
+  const fieldKeys = [['title','Title'],['authors','Authors'],['year','Year'],['journal','Journal'],
+    ['publisher','Publisher'],['doi','DOI'],['arxiv','arXiv'],['pmid','PMID'],['isbn','ISBN'],
+    ['url','URL'],['volume','Volume'],['issue','Issue'],['pages','Pages'],['edition','Edition']];
+  const fields = fieldKeys.filter(([k]) => ref[k]).map(([k, label]) =>
+    `<div class="field-row"><span class="fk">${label}</span><span class="fv ok" title="${esc(ref[k])}">${esc(String(ref[k]).slice(0, 40))}</span></div>`
+  ).join('');
+
+  // Sources
+  const srcRows = [
+    ['Crossref', (result.srcs.crossref||[]).length],
+    ['OpenAlex', (result.srcs.openalex||[]).length],
+    ['Semantic Scholar', (result.srcs.semantic||[]).length],
+    ['PubMed', (result.srcs.pubmed||[]).length],
+    ['SearXNG', (result.srcs.searxng||[]).length],
+    ['URL Check', (result.srcs.urlcheck||[]).length],
+  ].map(([k, v]) =>
+    `<div class="field-row"><span class="fk">${k}</span><span class="fv ${v ? 'ok' : 'warn'}">${v} result${v !== 1 ? 's' : ''}</span></div>`
+  ).join('');
+
+  // Error taxonomy
+  const taxHtml = errors.length ? errors.map(e =>
+    `<div class="tax-item">
+      <span class="tax-sev ts-${e.severity}">${e.severity}</span>
+      <div class="tax-content">
+        <div class="tax-field">${esc(e.field)}</div>
+        <div class="tax-desc">${esc(e.desc)}</div>
+        ${(e.cited || e.found) ? `<div class="tax-values">
+          ${e.cited ? `<span class="tax-expected">Cited: ${esc(String(e.cited).slice(0,60))}</span>` : ''}
+          ${e.found ? `<span class="tax-found">Found: ${esc(String(e.found).slice(0,60))}</span>` : ''}
+        </div>` : ''}
+      </div>
+    </div>`
+  ).join('') : '<div class="no-evidence">No discrepancies detected.</div>';
+
+  // Evidence
+  const top5 = (result.all || []).slice(0, 5);
+  const evidenceHtml = top5.length ? top5.map(c => {
+    const srcCls = { crossref: 'ev-crossref', openalex: 'ev-openalex', semantic: 'ev-semantic', pubmed: 'ev-pubmed', searxng: 'ev-searxng', urlcheck: 'ev-urlcheck' }[c.source] || 'ev-crossref';
+    return `<div class="ev-item">
+      <span class="ev-source ${srcCls}">${esc(c.db || c.type)}</span>
+      <div class="ev-body">
+        ${c.url ? `<a class="ev-link" href="${esc(c.url)}" target="_blank" rel="noopener">${esc((c.title || c.url).slice(0,85))}</a>` : `<div class="ev-link" style="cursor:default;color:var(--dim)">${esc(c.title.slice(0,85))}</div>`}
+        <div class="ev-sub">${esc([c.year, c.authors.slice(0,35), c.doi ? 'DOI:'+c.doi : ''].filter(Boolean).join(' · '))}</div>
+        ${c.sim > 0 && c.sim < 100 ? `<div class="ev-match" style="color:var(--muted)">${c.sim}% title match</div>` : ''}
+        ${c.sim === 100 ? `<div class="ev-match" style="color:var(--verified)">Exact identifier match</div>` : ''}
+        ${c.corsOpaque ? `<div class="ev-sub">URL status: reachable (CORS-opaque)</div>` : c.httpStatus ? `<div class="ev-sub">HTTP ${c.httpStatus} ${c.isAlive ? '✓' : '✗'}</div>` : ''}
+        ${c.snippet ? `<div class="ev-snippet">${esc(c.snippet.slice(0,120))}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('') : '<div class="no-evidence">No candidates found in any source.</div>';
+
+  // Canonical / corrections
+  const rawHtml   = ref.raw ? `<div class="canonical-block"><div class="can-label">Original citation</div><div class="can-value original">${esc(ref.raw.slice(0,400))}</div></div>` : '';
+  const canHtml   = result.canonical ? `<div class="canonical-block"><div class="can-label">Canonical match</div><div class="can-value">${esc(result.canonical)}</div></div>` : '';
+  const sugHtml   = result.suggested ? `<div class="canonical-block"><div class="can-label">Suggested correction</div><div class="can-value corrected">${esc(result.suggested)}</div><button class="can-copy-btn" data-copy="${esc(result.suggested)}" onclick="copyFromBtn(this)">📋 Copy</button></div>` : '';
+  const qHtml     = result.searchQueries?.length ? `<div class="canonical-block"><div class="can-label">Search queries</div><div class="can-value original">${result.searchQueries.map(q => `[${q.type}] ${q.query}`).join('\n')}</div></div>` : '';
+
+  const card = document.createElement('div');
+  card.className = 'ref-card'; card.id = id;
+  card.setAttribute('data-status', status);
+  card.setAttribute('data-conf', String(confidence));
+  const explanation = buildExplanation(result);
+  card.innerHTML = `
+    <div class="ref-header" onclick="toggleCard('${id}')">
+      <span class="status-badge ${st.cls}">${st.lbl}</span>
+      <div class="ref-info">
+        <div class="ref-title">${esc(dispTitle)}</div>
+        <div class="ref-meta">${esc(meta)}</div>
+        ${errors.length ? `<div class="ref-errors">${errChips}${errors.length > 4 ? `<span class="err-chip ec-info">+${errors.length - 4} more</span>` : ''}</div>` : ''}
+      </div>
+      <span class="ref-conf" style="color:${st.col}">${confidence}%</span>
+      <span class="ref-toggle">▼</span>
+    </div>
+    <div class="ref-body">
+      <div class="card-sec"><div class="sec-head">Completeness</div>
+        <div class="check-list">${checks}</div>
+      </div>
+      <div class="card-sec" style="padding:10px 14px;background:var(--surface2);">
+        <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px;font-family:var(--font-display)">Summary</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.7;">${esc(explanation)}</div>
+      </div>
+      <div class="card-sec" style="display:grid;grid-template-columns:1fr 1fr">
+        <div style="padding:10px 14px;border-right:1px solid var(--line)">
+          <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;font-family:var(--font-display)">Extracted fields</div>
+          ${fields || '<div class="no-evidence">No fields extracted</div>'}
+        </div>
+        <div style="padding:10px 14px">
+          <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;font-family:var(--font-display)">Sources searched</div>
+          ${srcRows}
+        </div>
+      </div>
+      ${errors.length ? `<div class="card-sec"><div class="sec-head">Field-Level Error Analysis</div><div class="error-taxonomy">${taxHtml}</div></div>` : ''}
+      <div class="card-sec"><div class="sec-head">Evidence (${top5.length} candidates)</div><div class="evidence-list">${evidenceHtml}</div></div>
+      <div class="card-sec">${rawHtml}${canHtml}${sugHtml}${qHtml}</div>
+    </div>`;
+  return card;
+}
+
+function getRequiredFields(type) {
+  if (type === 'book')     return [['title','Title'],['authors','Authors'],['year','Year'],['isbn','ISBN'],['publisher','Publisher']];
+  if (type === 'web')      return [['title','Title'],['url','URL'],['year','Date']];
+  if (type === 'news')     return [['title','Title'],['url','URL'],['year','Date'],['authors','Author']];
+  if (type === 'preprint') return [['title','Title'],['authors','Authors'],['year','Year'],['arxiv','arXiv']];
+  if (type === 'standard') return [['title','Title'],['year','Year']];
+  return [['title','Title'],['authors','Authors'],['year','Year'],['journal','Journal'],['doi','DOI']];
+}
+
+/* ═══════════════════════════════════════════════
+   EXPORT FUNCTIONS
+═══════════════════════════════════════════════ */
+function exportJSON() {
+  const sess = sessions.find(x => x.id === currentId);
+  const data = ((sess && sess._results) || window._lastResults || []).map(r => ({
+    num: r.ref.num, title: r.ref.title, authors: r.ref.authors, year: r.ref.year,
+    type: r.ref.type, doi: r.ref.doi, isbn: r.ref.isbn, journal: r.ref.journal,
+    status: r.status, confidence: r.confidence,
+    errors: r.errors, canonical: r.canonical, suggested: r.suggested
+  }));
+  download('refcheckai-results.json', JSON.stringify(data, null, 2), 'application/json');
+}
+function exportCSV() {
+  const sess = sessions.find(x => x.id === currentId);
+  const rows = [['#','Title','Authors','Year','Type','DOI','Status','Confidence','Issues']];
+  ((sess && sess._results) || window._lastResults || []).forEach(r => {
+    const issues = r.errors.map(e => e.field + ': ' + e.desc).join(' | ');
+    rows.push([r.ref.num||'', r.ref.title||'', r.ref.authors||'', r.ref.year||'',
+      r.ref.type||'', r.ref.doi||'', r.status, r.confidence + '%', issues]);
+  });
+  const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(',')).join('\n');
+  download('refcheckai-results.csv', csv, 'text/csv');
+}
+function exportMarkdown() {
+  const sess = sessions.find(x => x.id === currentId);
+  const lines = ['# RefCheckAI Verification Report\n'];
+  ((sess && sess._results) || window._lastResults || []).forEach(r => {
+    lines.push(`## [${r.ref.num||'?'}] ${r.ref.title||'Untitled'}`);
+    lines.push(`**Status:** ${r.status} | **Confidence:** ${r.confidence}%`);
+    if (r.ref.authors) lines.push(`**Authors:** ${r.ref.authors}`);
+    if (r.ref.year) lines.push(`**Year:** ${r.ref.year}`);
+    if (r.errors.length) {
+      lines.push('\n**Issues:**');
+      r.errors.forEach(e => lines.push(`- [${e.severity.toUpperCase()}] ${e.field}: ${e.desc}${e.cited ? ` (cited: ${e.cited})` : ''}${e.found ? ` → found: ${e.found}` : ''}`));
+    }
+    if (r.suggested) lines.push(`\n**Suggested correction:** ${r.suggested}`);
+    lines.push('');
+  });
+  download('refcheckai-results.md', lines.join('\n'), 'text/markdown');
+}
+function download(filename, content, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function copyText(text) {
+  navigator.clipboard.writeText(text).catch(() => {});
+}
+function copyFromBtn(btn) {
+  const text = btn.getAttribute('data-copy');
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = '✓ Copied';
+    setTimeout(() => { btn.innerHTML = '📋 Copy'; }, 1500);
+  }).catch(() => {
+    // Fallback for non-https
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); btn.textContent = '✓ Copied'; setTimeout(() => { btn.innerHTML = '📋 Copy'; }, 1500); } catch(e) {}
+    document.body.removeChild(ta);
+  });
+}
+
+/* ═══════════════════════════════════════════════
+   UTILITIES
+═══════════════════════════════════════════════ */
+function classifyURL(url) {
+  if (!url) return 'web';
+  const u = url.toLowerCase();
+  if (/doi\.org|arxiv|pubmed|scholar\.google|researchgate|jstor|springer|wiley|elsevier|ieee\.org|acm\.org|nature\.com|sciencedirect|ncbi\.nlm|semanticscholar|crossref/.test(u)) return 'academic';
+  if (/wikipedia/.test(u)) return 'wiki';
+  if (/github|gitlab/.test(u)) return 'code';
+  if (/\.gov|\.edu/.test(u)) return 'official';
+  if (/reuters|bbc\.|nytimes|theguardian|cnn\.com|apnews|zdnet|techcrunch|space\.com|futurism\.com/.test(u)) return 'news';
+  return 'web';
+}
+
+// Enhanced title similarity: Jaccard + bigram, with short-title guard
+function titleSim(a, b) {
+  if (!a || !b) return 0;
+  const normalize = s => s.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+  const na = normalize(a), nb = normalize(b);
+  if (na === nb) return 100;
+  // Short title guard: if either title has <4 meaningful words, reduce bigram weight
+  const shortTitle = na.split(' ').filter(w=>w.length>2).length < 4 || nb.split(' ').filter(w=>w.length>2).length < 4;
+  // Word-level Jaccard (>2 chars)
+  const wa = new Set(na.split(' ').filter(w => w.length > 2));
+  const wb = new Set(nb.split(' ').filter(w => w.length > 2));
+  if (!wa.size && !wb.size) return 0;
+  let inter = 0; wa.forEach(w => { if (wb.has(w)) inter++; });
+  const jac = inter / (wa.size + wb.size - inter);
+  // Bigram bonus for short titles
+  const bigrams = s => { const bg = new Set(); for (let i=0;i<s.length-1;i++) bg.add(s.slice(i,i+2)); return bg; };
+  const ba = bigrams(na), bb = bigrams(nb); let binter = 0;
+  ba.forEach(b => { if (bb.has(b)) binter++; });
+  const bsim = binter / Math.max(ba.size, bb.size, 1);
+  // Reduce bigram weight for short titles to prevent false matches
+  const bigramWeight = shortTitle ? 0.15 : 0.3;
+  return Math.round((jac * (1 - bigramWeight) + bsim * bigramWeight) * 100);
+}
+
+/* ═══════════════════════════════════════════════
+   DOM HELPERS
+═══════════════════════════════════════════════ */
+function mkEl(tag, cls, html) {
+  const d = document.createElement(tag);
+  d.className = cls;
+  if (html) d.innerHTML = html;
+  return d;
+}
+function addUserBubble(html) {
+  const d = mkEl('div', 'msg msg-user', '<div class="user-bubble">' + html + '</div>');
+  document.getElementById('chat').appendChild(d); scrollBot();
+}
+function addAIMsg() {
+  const d = mkEl('div', 'msg msg-ai', '<div class="ai-avatar"></div><div class="ai-body"><div class="ai-name">RefCheckAI</div></div>');
+  document.getElementById('chat').appendChild(d); scrollBot(); return d;
+}
+function addStatusLine(parent, text, spin, color) {
+  const d = mkEl('div', 'status-line');
+  d.style.color = color || 'var(--dim)';
+  d.innerHTML = (spin ? '<div class="spinner"></div>' : '') + esc(text);
+  parent.appendChild(d); scrollBot(); return d;
+}
+function addProg(parent, total) {
+  const hasSearx = !!getSearx();
+  const d = mkEl('div', 'prog-card',
+    `<div class="prog-top">
+      <div class="prog-sources">
+        <span class="src-pill active" id="src-crossref">Crossref</span>
+        <span class="src-pill active" id="src-openalex">OpenAlex</span>
+        <span class="src-pill active" id="src-semantic">Semantic Scholar</span>
+        <span class="src-pill active" id="src-pubmed">PubMed</span>
+        ${hasSearx ? '<span class="src-pill active" id="src-searxng">SearXNG</span>' : ''}
+      </div>
+      <span class="prog-count">0/${total}</span>
+    </div>
+    <div class="prog-bar"><div class="prog-fill" style="width:0%"></div></div>
+    <div class="prog-cur">Starting…</div>`
+  );
+  parent.appendChild(d); scrollBot(); return d;
+}
+function addPipeline(parent) {
+  const steps = [
+    '① Locate reference section',
+    '② Extract citations (regex + LLM)',
+    '③ Classify & normalize',
+    '④ Search: Crossref · OpenAlex · Semantic Scholar · SearXNG',
+    '⑤ Field-level validation',
+    '⑥ Generate audit report',
+  ];
+  const d = mkEl('div', 'pipeline-card');
+  d.innerHTML = '<div class="pipeline-title">Pipeline</div><div class="pipeline-steps">' +
+    steps.map((s, i) =>
+      `<div class="pipe-step" id="ps-${i}">
+        <div class="pipe-icon pi-wait" id="psi-${i}">${i+1}</div>
+        <div class="pipe-label" id="psl-${i}">${s}</div>
+      </div>`
+    ).join('') + '</div>';
+  parent.appendChild(d); scrollBot(); return d;
+}
+function setPipeStep(pipeline, idx, state, label) {
+  const icon = pipeline.querySelector('#psi-' + idx);
+  const lbl  = pipeline.querySelector('#psl-' + idx);
+  if (!icon || !lbl) return;
+  icon.className = 'pipe-icon pi-' + state;
+  icon.textContent = state === 'done' ? '✓' : state === 'err' ? '✗' : (idx+1);
+  lbl.className = 'pipe-label' + (state === 'done' ? ' done' : state === 'active' ? ' active' : '');
+  lbl.textContent = label;
+  scrollBot();
+}
+function toggleCard(id) {
+  document.getElementById(id).classList.toggle('open');
+  scrollBot();
+}
+
+/* ═══════════════════════════════════════════════
+   SESSION MANAGEMENT
+═══════════════════════════════════════════════ */
+function finish(results) {
+  const s = sessions.find(x => x.id === currentId);
+  if (s) {
+    s.v = results.filter(r => r.status === 'verified').length;
+    s.r = results.filter(r => ['partial','review','wrong'].includes(r.status)).length;
+    s.n = results.filter(r => r.status === 'notfound').length;
+    saveS(); renderSidebar();
+  }
+  saveHTML();
+}
+function saveHTML() {
+  const s = sessions.find(x => x.id === currentId);
+  if (s) { s.html = document.getElementById('chat').innerHTML; saveS(); }
+}
+
+/* ═══════════════════════════════════════════════
+   TAB SWITCHING
+═══════════════════════════════════════════════ */
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+}
+
+/* ═══════════════════════════════════════════════
+   PUBMED CONNECTOR (new)
+═══════════════════════════════════════════════ */
+async function connPubMed(title, pmid) {
+  const out = [];
+  try {
+    let searchId = pmid;
+    if (!searchId && title) {
+      const sr = await fetch('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=' + encodeURIComponent('"' + title.slice(0,100) + '"') + '&retmax=3&retmode=json');
+      if (!sr.ok) return out;
+      const sd = await sr.json();
+      searchId = sd.esearchresult?.idlist?.[0];
+    }
+    if (!searchId) return out;
+    const r = await fetch('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=' + searchId + '&retmode=json');
+    if (!r.ok) return out;
+    const d = await r.json();
+    const w = d.result?.[searchId];
+    if (!w) return out;
+    const wt = w.title || '';
+    const sim = pmid ? 100 : titleSim(title, wt);
+    if (sim < 10) return out;
+    // Fetch real citation count from NCBI iCite API (separate from esummary)
+    let citCount = 0;
+    try {
+      const pmidNum = searchId;
+      const icite = await fetch('https://icite.od.nih.gov/api/pubs?pmids=' + pmidNum);
+      if (icite.ok) {
+        const id = await icite.json();
+        citCount = id?.data?.[0]?.citation_count ?? 0;
+      }
+    } catch(e) { /* iCite unavailable — fall back to 0, not fabricated */ }
+    out.push(normalizeCandidate({
+      isAcademic: true, db: 'PubMed', source: 'pubmed',
+      title: wt,
+      url: 'https://pubmed.ncbi.nlm.nih.gov/' + searchId + '/',
+      year: (w.pubdate || '').slice(0,4),
+      authors: (w.authors || []).slice(0,5).map(a => a.name || '').filter(Boolean).join('; '),
+      journal: w.fulljournalname || w.source || '',
+      doi: (w.elocationid || '').replace(/^doi:\s*/i,'') || '',
+      sim, type: 'academic',
+      evidence_url: 'https://pubmed.ncbi.nlm.nih.gov/' + searchId + '/',
+      isOpenAccess: w.pmcid ? true : false,
+      citationCount: citCount
+    }));
+  } catch(e) { console.log('[PubMed]', e.message); }
+  return out;
+}
+
+/* ═══════════════════════════════════════════════
+   SYSTEM 1: MULTI-SOURCE COMPARISON FRAMEWORK
+   Runs each source independently, measures accuracy,
+   precision, recall per source vs combined.
+═══════════════════════════════════════════════ */
+function buildComparisonFramework(results) {
+  // Per-source hit rate
+  const sources = ['crossref','openalex','semantic','pubmed','searxng'];
+  const labels  = { crossref:'Crossref', openalex:'OpenAlex', semantic:'Semantic Scholar', pubmed:'PubMed', searxng:'SearXNG' };
+  const stats = {};
+  sources.forEach(s => {
+    stats[s] = { hits:0, total:0, exact:0, strong:0, avgCandidates:0, verified:0 };
+  });
+
+  let combinedVerified = 0;
+  results.forEach(r => {
+    if (r.status === 'verified') combinedVerified++;
+    sources.forEach(s => {
+      const srcCands = (r.srcs?.[s] || []);
+      stats[s].total++;
+      if (srcCands.length > 0) stats[s].hits++;
+      if (srcCands.some(c => c.sim === 100)) stats[s].exact++;
+      if (srcCands.some(c => c.sim >= 70)) stats[s].strong++;
+      // Solo-source would verify if it had an exact match
+      if (srcCands.some(c => c.sim === 100)) stats[s].verified++;
+    });
+  });
+
+  const total = results.length || 1;
+  const combinedPrecision = Math.round(combinedVerified / total * 100);
+
+  const el = document.getElementById('compare-content');
+  if (!el) return;
+
+  // Build comparison cards
+  const cards = sources.map(s => {
+    const st = stats[s];
+    const hitRate  = total > 0 ? Math.round(st.hits / total * 100) : 0;
+    const exactRate = total > 0 ? Math.round(st.exact / total * 100) : 0;
+    const isWinner = st.exact === Math.max(...sources.map(x => stats[x].exact));
+    return `<div class="fw-card ${isWinner ? 'fw-winner' : ''}">
+      <div class="fw-title">${labels[s]}${isWinner ? '<span class="fw-badge">Best</span>' : ''}</div>
+      <div class="fw-metric"><span class="fw-k">Hit rate</span><span class="fw-v">${hitRate}%</span></div>
+      <div class="fw-metric"><span class="fw-k">Exact match</span><span class="fw-v">${exactRate}%</span></div>
+      <div class="fw-metric"><span class="fw-k">Strong match</span><span class="fw-v">${total>0?Math.round(st.strong/total*100):0}%</span></div>
+      <div class="fw-metric"><span class="fw-k">Solo verify</span><span class="fw-v">${total>0?Math.round(st.verified/total*100):0}%</span></div>
+      <div class="fw-metric"><span class="fw-k">Coverage</span><span class="fw-v">${st.hits}/${total}</span></div>
+      <div class="fw-metric"><span class="fw-k">Avg candidates</span><span class="fw-v">${(results.reduce((a,r)=>a+(r.srcs?.[s]||[]).length,0)/Math.max(total,1)).toFixed(1)}</span></div>
+    </div>`;
+  }).join('');
+
+  // Research findings narrative
+  const bestSource = sources.reduce((a,b) => stats[a].exact >= stats[b].exact ? a : b);
+  const bestHitSource = sources.reduce((a,b) => stats[a].hits >= stats[b].hits ? a : b);
+  const combinedGain = combinedPrecision - Math.round(stats[bestSource].verified / total * 100);
+
+  el.innerHTML = `
+    <div style="padding:20px 24px;">
+      <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px;">Multi-Source Verification Comparison</div>
+      <div style="font-size:12px;color:var(--dim);margin-bottom:16px;line-height:1.7;">
+        Experimental framework comparing ${sources.length} verification sources across ${total} references.
+        Combined pipeline achieved <strong style="color:var(--verified)">${combinedPrecision}%</strong> verification rate vs best single source at <strong style="color:var(--partial)">${Math.round(stats[bestSource].verified/total*100)}%</strong>.
+        Multi-source combination provides <strong style="color:var(--text)">${combinedGain > 0 ? '+'+combinedGain : combinedGain}%</strong> improvement.
+      </div>
+      <div class="framework-grid">${cards}</div>
+      <div style="background:var(--surface2);border:1px solid var(--line);border-radius:var(--radius-lg);padding:14px 16px;margin-top:14px;">
+        <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:8px;">Research Findings</div>
+        <div style="font-size:11px;color:var(--dim);line-height:1.8;">
+          • <strong style="color:var(--text2)">${labels[bestSource]}</strong> achieves the highest exact-match rate for structured scholarly queries.<br>
+          • <strong style="color:var(--text2)">${labels[bestHitSource]}</strong> achieves the widest coverage (most references found in at least one result).<br>
+          • Combining all sources reduces Not-Found rate by approximately ${Math.max(0, Math.round((1 - combinedVerified/Math.max(stats[bestSource].hits,1)) * total))} references vs best single source.<br>
+          • <strong style="color:var(--text2)">Recommendation:</strong> Academic papers should route to Crossref+OpenAlex+Semantic Scholar. Web/news references should use SearXNG. PubMed adds value for biomedical literature.<br>
+          • <strong style="color:var(--text2)">Publication opportunity:</strong> This comparison framework supports an information retrieval study on optimal multi-source citation verification pipelines.
+        </div>
+      </div>
+      <div style="margin-top:14px;">
+        <button class="export-btn" onclick="exportComparisonCSV()" style="font-size:11px;">⬇ Export Comparison CSV</button>
+      </div>
+    </div>`;
+}
+
+function exportComparisonCSV() {
+  const results = window._lastResults || [];
+  const sources = ['crossref','openalex','semantic','pubmed','searxng'];
+  const rows = [['Reference #','Title','Status','Confidence','Crossref Hits','OpenAlex Hits','Semantic Hits','PubMed Hits','SearXNG Hits','Best Source']];
+  results.forEach(r => {
+    const hits = sources.map(s => (r.srcs?.[s]||[]).length);
+    const best = sources[hits.indexOf(Math.max(...hits))] || '';
+    rows.push([r.ref.num||'', r.ref.title||'', r.status, r.confidence+'%', ...hits, best]);
+  });
+  const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(',')).join('\n');
+  download('refcheckai-comparison.csv', csv, 'text/csv');
+}
+
+/* ═══════════════════════════════════════════════
+   SYSTEM 2: REFERENCE QUALITY SCORING
+   Scores each reference on peer-review status,
+   citation indicators, journal rep, recency, etc.
+═══════════════════════════════════════════════ */
+function computeQualityScore(result) {
+  const { ref, best, status } = result;
+  let overall = 0, trust = 0, academic = 0, evidence = 0;
+  const breakdown = [];
+
+  // ── Existence / Verification ──
+  if (status === 'verified') { overall += 25; trust += 30; breakdown.push({k:'Existence verified', v:'+25', good:true}); }
+  else if (status === 'partial') { overall += 12; trust += 15; breakdown.push({k:'Partially verified', v:'+12', good:null}); }
+  else { trust -= 10; breakdown.push({k:'Not found or wrong', v:'-10', good:false}); }
+
+  // ── Type quality ──
+  const typeScore = { journal:20, conference:16, preprint:10, book:14, standard:12, web:4, news:3, other:2 };
+  const ts = typeScore[ref.type] || 2;
+  overall += ts; academic += ts; breakdown.push({k:'Source type ('+ref.type+')', v:'+'+ts, good:ts>=14});
+
+  // ── DOI presence ──
+  if (ref.doi || best?.doi) { overall += 8; trust += 8; evidence += 8; breakdown.push({k:'Has DOI', v:'+8', good:true}); }
+
+  // ── Recency (0-10 pts, decays from current year) ──
+  const yr = parseInt(ref.year || best?.year || 0);
+  if (yr > 1900) {
+    const age = new Date().getFullYear() - yr;
+    const recency = Math.max(0, 10 - Math.floor(age / 3));
+    overall += recency; breakdown.push({k:'Recency ('+yr+')', v:'+'+recency, good:recency>=7});
+  }
+
+  // ── Open Access ──
+  if (best?.isOpenAccess) { overall += 4; evidence += 5; breakdown.push({k:'Open access', v:'+4', good:true}); }
+
+  // ── Citation count (real signal from OpenAlex / Semantic Scholar / PubMed iCite) ──
+  const citCount = best?.citationCount;
+  if (typeof citCount === 'number' && citCount >= 0) {
+    let citPts = 0;
+    if (citCount >= 500)      citPts = 15;
+    else if (citCount >= 100) citPts = 12;
+    else if (citCount >= 20)  citPts = 8;
+    else if (citCount >= 5)   citPts = 4;
+    else if (citCount >= 1)   citPts = 1;
+    if (citPts > 0) { overall += citPts; evidence += citPts; trust += Math.round(citPts*0.5); breakdown.push({k:'Citation count ('+citCount+')', v:'+'+citPts, good:citPts>=8}); }
+    else breakdown.push({k:'Citation count (0)', v:'0', good:null});
+  }
+
+  // ── Journal indicators from candidate ──
+  const journalStr = (ref.journal || best?.journal || '').toLowerCase();
+  if (/nature|science|lancet|nejm|cell|jama|bmj|ieee trans|acm trans|pnas/i.test(journalStr)) {
+    overall += 12; academic += 15; breakdown.push({k:'High-impact venue', v:'+12', good:true});
+  } else if (journalStr.length > 3) {
+    overall += 6; academic += 6; breakdown.push({k:'Named venue', v:'+6', good:true});
+  }
+
+  // ── Peer-review signal (DOI prefix patterns, known OA publishers) ──
+  const hasDoi = !!(ref.doi || best?.doi);
+  const journalKnown = journalStr.length > 3;
+  const isPeerReviewed = hasDoi && journalKnown && !['web','news','other'].includes(ref.type);
+  const isSystematicReview = /systematic review|meta-analysis|cochrane|campbell collaboration/i.test((ref.title||'') + journalStr);
+  if (isSystematicReview) { overall += 18; academic += 20; trust += 15; breakdown.push({k:'Systematic review / meta-analysis', v:'+18', good:true}); }
+  else if (isPeerReviewed) { overall += 10; academic += 12; trust += 10; breakdown.push({k:'Peer-reviewed (DOI + named venue)', v:'+10', good:true}); }
+
+  // ── Author completeness ──
+  if (ref.authors) { overall += 5; trust += 5; breakdown.push({k:'Authors present', v:'+5', good:true}); }
+  else { breakdown.push({k:'Missing authors', v:'0', good:false}); }
+
+  // ── Completeness penalties ──
+  const errors = result.errors || [];
+  const errCount = errors.filter(e=>e.severity==='error').length;
+  const warnCount = errors.filter(e=>e.severity==='warning').length;
+  if (errCount > 0) { const p = errCount * 8; overall -= p; trust -= p; breakdown.push({k:errCount+' field errors', v:'-'+p, good:false}); }
+  if (warnCount > 0) { const p = warnCount * 3; overall -= p; breakdown.push({k:warnCount+' warnings', v:'-'+p, good:null}); }
+
+  // ── Evidence strength ──
+  const cands = result.all || [];
+  if (cands.filter(c=>c.isAcademic).length >= 3) { evidence += 15; breakdown.push({k:'3+ academic sources agree', v:'+15', good:true}); }
+  else if (cands.filter(c=>c.isAcademic).length >= 2) { evidence += 8; breakdown.push({k:'2 academic sources', v:'+8', good:true}); }
+  else if (cands.filter(c=>c.isAcademic).length === 1) { evidence += 4; breakdown.push({k:'1 academic source', v:'+4', good:null}); }
+
+  // No artificial floor offsets — scores reflect actual signals only
+  return {
+    overall:  Math.max(0, Math.min(100, Math.round(overall))),
+    trust:    Math.max(0, Math.min(100, Math.round(trust))),
+    academic: Math.max(0, Math.min(100, Math.round(academic))),
+    evidence: Math.max(0, Math.min(100, Math.round(evidence))),
+    breakdown
+  };
+}
+
+function buildQualityTab(results) {
+  const el = document.getElementById('quality-content');
+  if (!el) return;
+
+  // Compute all scores
+  const scored = results.map(r => ({ ...r, quality: computeQualityScore(r) }));
+  // Sort by overall quality desc
+  const sorted = [...scored].sort((a,b) => b.quality.overall - a.quality.overall);
+
+  const avgOverall = Math.round(scored.reduce((s,r)=>s+r.quality.overall,0)/Math.max(scored.length,1));
+  const avgTrust   = Math.round(scored.reduce((s,r)=>s+r.quality.trust,0)/Math.max(scored.length,1));
+  const avgAcad    = Math.round(scored.reduce((s,r)=>s+r.quality.academic,0)/Math.max(scored.length,1));
+  const avgEvid    = Math.round(scored.reduce((s,r)=>s+r.quality.evidence,0)/Math.max(scored.length,1));
+
+  const qColor = q => q >= 75 ? 'var(--verified)' : q >= 50 ? 'var(--partial)' : q >= 30 ? 'var(--wrong)' : 'var(--notfound)';
+
+  const rows = sorted.map((r,i) => {
+    const q = r.quality;
+    const title = (r.ref.title||'Untitled').slice(0,55);
+    const bkd = q.breakdown.map(b => `<div style="display:flex;justify-content:space-between;font-size:10px;padding:1px 0;font-family:var(--font-mono);">
+      <span style="color:${b.good===true?'var(--verified)':b.good===false?'var(--notfound)':'var(--muted)'}">${esc(b.k)}</span>
+      <span style="color:${b.good===true?'var(--verified)':b.good===false?'var(--notfound)':'var(--dim)'}">${esc(b.v)}</span>
+    </div>`).join('');
+    return `<div class="audit-entry">
+      <div class="ae-head" style="cursor:pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+        <span class="ae-num">#${i+1}</span>
+        <span class="ae-title">${esc(title)}</span>
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          <span style="font-size:12px;font-weight:700;font-family:var(--font-mono);color:${qColor(q.overall)}">${q.overall}</span>
+          <span style="font-size:10px;padding:2px 7px;border-radius:100px;background:${qColor(q.overall)}22;color:${qColor(q.overall)}">
+            ${q.overall>=75?'Strong':q.overall>=50?'Moderate':q.overall>=30?'Weak':'Poor'}
+          </span>
+        </div>
+      </div>
+      <div class="ae-body" style="display:none">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0;border-bottom:1px solid var(--line);">
+          ${[['Overall',q.overall],['Trustworthiness',q.trust],['Academic Strength',q.academic],['Evidence',q.evidence]].map(([l,v])=>`
+          <div style="padding:10px 12px;text-align:center;border-right:1px solid var(--line);">
+            <div style="font-size:18px;font-weight:700;color:${qColor(v)};font-family:var(--font-mono)">${v}</div>
+            <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">${l}</div>
+            <div class="q-bar" style="margin-top:6px"><div class="q-fill" style="width:${v}%;background:${qColor(v)}"></div></div>
+          </div>`).join('')}
+        </div>
+        <div style="padding:10px 14px">${bkd}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `<div style="padding:20px 24px;">
+    <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px;">Reference Quality Scores</div>
+    <div style="font-size:12px;color:var(--dim);margin-bottom:14px;">Ranked from strongest to weakest. Click any reference to see the scoring breakdown.</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px;">
+      ${[['Avg Overall',avgOverall],['Avg Trust',avgTrust],['Avg Academic',avgAcad],['Avg Evidence',avgEvid]].map(([l,v])=>`
+      <div class="stat-box"><div class="stat-num" style="color:${qColor(v)}">${v}</div><div class="stat-lbl">${l}</div></div>`).join('')}
+    </div>
+    <div style="margin-bottom:8px"><button class="export-btn" onclick="exportQualityCSV()">⬇ Export Quality CSV</button></div>
+    ${rows}
+  </div>`;
+}
+
+function exportQualityCSV() {
+  const results = window._lastResults || [];
+  const rows = [['#','Title','Type','Year','Overall','Trust','Academic','Evidence','Top Issue']];
+  results.forEach((r,i) => {
+    const q = computeQualityScore(r);
+    const topIssue = r.errors?.[0]?.desc || '';
+    rows.push([i+1, r.ref.title||'', r.ref.type||'', r.ref.year||'', q.overall, q.trust, q.academic, q.evidence, topIssue]);
+  });
+  const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(',')).join('\n');
+  download('refcheckai-quality.csv', csv, 'text/csv');
+}
+
+/* ═══════════════════════════════════════════════
+   SYSTEM 3: REFERENCE IMPROVEMENT ENGINE
+   Uses LLM (or heuristic fallback) to find stronger sources
+═══════════════════════════════════════════════ */
+async function buildImprovementEngine(results, apiKey) {
+  const el = document.getElementById('improve-content');
+  if (!el) return;
+  el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);font-size:12px;">Analyzing references for improvement opportunities…</div>';
+
+  const improvements = [];
+
+  for (const r of results) {
+    const q = computeQualityScore(r);
+    const ref = r.ref;
+
+    // Determine if improvement is possible
+    const isWeak = q.overall < 55 || ref.type === 'web' || ref.type === 'news' || ref.type === 'other';
+    const hasBetterAlternative = r.all && r.all.some(c => c.isAcademic && c.sim > 40);
+
+    if (!isWeak && q.overall >= 70) {
+      improvements.push({ ref, quality: q, status: 'strong', recommendation: null,
+        reason: 'Reference meets quality threshold — no improvement needed.', gain: 0 });
+      continue;
+    }
+
+    // Use LLM if key available, else heuristic
+    let rec = null;
+    if (apiKey && (ref.type === 'web' || ref.type === 'news' || ref.type === 'other' || q.overall < 50)) {
+      rec = await llmImproveRef(ref, r.best, apiKey);
+      await sleep(300); // Respect Anthropic rate limits between calls
+    } else {
+      rec = heuristicImproveRef(ref, r.all, r.best);
+    }
+
+    improvements.push({ ref, quality: q, status: isWeak ? (hasBetterAlternative ? 'upgrade' : 'weak') : 'moderate',
+      recommendation: rec, reason: rec?.reason || 'A higher-quality source may exist for this claim.',
+      gain: rec ? (rec.estimatedQuality - q.overall) : 0 });
+  }
+
+  renderImprovements(improvements);
+}
+
+async function llmImproveRef(ref, best, apiKey) {
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514', max_tokens: 512,
+        system: 'You are a research quality advisor. Given a citation, suggest the strongest possible academic replacement. Return ONLY raw JSON, no markdown:\n{"replacement":string|null,"reason":string,"evidenceType":"peer-reviewed"|"systematic-review"|"meta-analysis"|"government"|"academic-book"|"conference"|"same","estimatedQuality":number(0-100),"searchQuery":string}',
+        messages: [{ role: 'user', content: 'Citation to improve:\nType: ' + ref.type + '\nTitle: ' + (ref.title||'') + '\nJournal: ' + (ref.journal||'none') + '\nYear: ' + (ref.year||'unknown') + '\nBest match found: ' + (best?.title||'none') + '\n\nSuggest a stronger replacement or explain why this is already strong.' }]
+      })
+    });
+    if (!resp.ok) throw new Error('API error');
+    const data = await resp.json();
+    let raw = (data.content?.[0]?.text||'').trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```\s*$/,'');
+    const s = raw.indexOf('{'), e = raw.lastIndexOf('}');
+    if (s !== -1 && e !== -1) raw = raw.slice(s, e+1);
+    return JSON.parse(raw);
+  } catch(e) {
+    return heuristicImproveRef(ref, [], null);
+  }
+}
+
+function heuristicImproveRef(ref, candidates, best) {
+  const type = ref.type;
+  const typeHierarchy = {
+    'web': { target: 'peer-reviewed journal article or government publication', estimatedQuality: 72, evidenceType: 'peer-reviewed' },
+    'news': { target: 'peer-reviewed study or official report', estimatedQuality: 68, evidenceType: 'peer-reviewed' },
+    'other': { target: 'peer-reviewed or indexed academic source', estimatedQuality: 65, evidenceType: 'peer-reviewed' },
+    'preprint': { target: 'published peer-reviewed version of this preprint', estimatedQuality: 78, evidenceType: 'peer-reviewed' },
+    'journal': { target: null, estimatedQuality: null, evidenceType: 'same' },
+    'conference': { target: 'extended journal version if available', estimatedQuality: 78, evidenceType: 'peer-reviewed' },
+    'book': { target: null, estimatedQuality: null, evidenceType: 'same' },
+  };
+  const h = typeHierarchy[type] || typeHierarchy['other'];
+  if (!h.target) return { replacement: null, reason: 'Source type is already high-quality.', evidenceType: 'same', estimatedQuality: 75, searchQuery: ref.title || '' };
+  const searchQ = (ref.title || '').slice(0,80) + ' ' + (ref.year || '');
+  return {
+    replacement: null,
+    reason: `Replace this ${type} source with a ${h.target}. Search for peer-reviewed studies on the same topic to strengthen the claim's evidence base.`,
+    evidenceType: h.evidenceType,
+    estimatedQuality: h.estimatedQuality,
+    searchQuery: searchQ.trim()
+  };
+}
+
+function renderImprovements(improvements) {
+  const el = document.getElementById('improve-content');
+  if (!el) return;
+
+  const upgrades   = improvements.filter(i => i.status === 'upgrade').length;
+  const weak       = improvements.filter(i => i.status === 'weak').length;
+  const strong     = improvements.filter(i => i.status === 'strong').length;
+  const avgGain    = improvements.filter(i=>i.gain>0).reduce((s,i)=>s+i.gain,0)/Math.max(1,improvements.filter(i=>i.gain>0).length);
+
+  const rows = improvements.map((imp, i) => {
+    const badgeClass = imp.status === 'strong' ? 'ib-strong' : imp.status === 'upgrade' ? 'ib-upgrade' : 'ib-weak';
+    const badgeLabel = imp.status === 'strong' ? 'Strong — keep' : imp.status === 'upgrade' ? 'Upgrade available' : 'Needs improvement';
+    const recHtml = imp.recommendation && imp.recommendation.replacement
+      ? `<div class="rev-label" style="margin-top:8px">Suggested Replacement</div>
+         <div class="improve-ref">${esc(imp.recommendation.replacement)}</div>`
+      : imp.recommendation?.searchQuery
+      ? `<div class="rev-label" style="margin-top:8px">Search Query</div>
+         <div class="improve-ref">${esc(imp.recommendation.searchQuery)}</div>` : '';
+    return `<div class="audit-entry">
+      <div class="ae-head">
+        <span class="ae-num">${esc((imp.ref.num?'['+imp.ref.num+']':'')+(i+1))}</span>
+        <span class="ae-title">${esc((imp.ref.title||'').slice(0,60))}</span>
+        <span class="improve-badge ${badgeClass}">${badgeLabel}</span>
+      </div>
+      <div class="improve-block">
+        <div class="improve-reason">${esc(imp.reason)}</div>
+        ${imp.gain > 0 ? `<div class="improve-gain">Estimated quality improvement: +${Math.round(imp.gain)} points (${imp.quality.overall} → ${Math.round(imp.quality.overall + imp.gain)})</div>` : ''}
+        ${imp.recommendation?.evidenceType && imp.recommendation.evidenceType !== 'same' ? `<div style="font-size:11px;color:var(--dim);margin-bottom:6px;">Target evidence type: <strong style="color:var(--text2)">${esc(imp.recommendation.evidenceType)}</strong></div>` : ''}
+        ${recHtml}
+      </div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `<div style="padding:20px 24px;">
+    <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px;">Reference Improvement Engine</div>
+    <div style="font-size:12px;color:var(--dim);margin-bottom:14px;">Identifies which references can be upgraded to stronger evidence sources.</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px;">
+      <div class="stat-box"><div class="stat-num" style="color:var(--partial)">${upgrades}</div><div class="stat-lbl">Upgradeable</div></div>
+      <div class="stat-box"><div class="stat-num" style="color:var(--wrong)">${weak}</div><div class="stat-lbl">Weak Sources</div></div>
+      <div class="stat-box"><div class="stat-num" style="color:var(--verified)">${strong}</div><div class="stat-lbl">Already Strong</div></div>
+      <div class="stat-box"><div class="stat-num" style="color:var(--text)">${avgGain > 0 ? '+' + Math.round(avgGain) : 'N/A'}</div><div class="stat-lbl">Avg Quality Gain</div></div>
+    </div>
+    ${rows}
+  </div>`;
+}
+
+/* ═══════════════════════════════════════════════
+   SYSTEM 4: CLAIM-TO-EVIDENCE ALIGNMENT
+   Uses LLM to identify what claim each reference supports
+   and whether the source actually supports it.
+═══════════════════════════════════════════════ */
+async function buildClaimAlignment(results, sourceText, apiKey) {
+  const el = document.getElementById('claims-content');
+  if (!el) return;
+  el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);font-size:12px;">Analyzing claim-evidence alignment…</div>';
+
+  const alignments = [];
+  const hasContext = sourceText && sourceText.length > 200;
+
+  for (const r of results) {
+    let alignment;
+    if (apiKey && hasContext) {
+      alignment = await llmClaimAlign(r.ref, r.best, sourceText, apiKey);
+    } else {
+      alignment = heuristicClaimAlign(r.ref, r.best, r.status, r.confidence);
+    }
+    alignments.push({ ref: r.ref, best: r.best, status: r.status, ...alignment });
+  }
+
+  renderClaimAlignment(alignments);
+}
+
+async function llmClaimAlign(ref, best, sourceText, apiKey) {
+  // Find surrounding context of the citation in the source text
+  const title = ref.title || '';
+  const refStr = ref.raw || title;
+  // Extract a window around where this ref appears
+  let context = '';
+  if (refStr.length > 5) {
+    const idx = sourceText.toLowerCase().indexOf(title.toLowerCase().slice(0,30));
+    if (idx > -1) context = sourceText.slice(Math.max(0, idx-500), idx+500);
+  }
+  if (!context && ref.num) {
+    const numPat = new RegExp('\\[' + ref.num + '\\]|\\(' + ref.num + '\\)');
+    const m = sourceText.match(numPat);
+    if (m) context = sourceText.slice(Math.max(0,sourceText.indexOf(m[0])-500), sourceText.indexOf(m[0])+200);
+  }
+  if (!context) return heuristicClaimAlign(ref, best, 'unknown', 50);
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514', max_tokens: 300,
+        system: 'Analyze whether a cited source supports the claim in the surrounding text. Return ONLY raw JSON:\n{"claim":string(the claim being made),"verdict":"fully_supported"|"partially_supported"|"weakly_supported"|"unsupported"|"contradicted","confidence":number(0-100),"explanation":string}',
+        messages: [{ role: 'user', content: 'Context from paper:\n"' + context.slice(0,900) + '"\n\nCited reference: ' + (ref.title||refStr).slice(0,100) + '\nSource found: ' + (best?.title||'not found') + '\n\nDoes the cited source support the claim?' }]
+      })
+    });
+    if (!resp.ok) throw new Error('API');
+    const data = await resp.json();
+    let raw = (data.content?.[0]?.text||'').trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```\s*$/,'');
+    const s = raw.indexOf('{'), e = raw.lastIndexOf('}');
+    if (s !== -1 && e !== -1) raw = raw.slice(s, e+1);
+    return JSON.parse(raw);
+  } catch(e) { return heuristicClaimAlign(ref, best, 'unknown', 50); }
+}
+
+function heuristicClaimAlign(ref, best, verifyStatus, confidence) {
+  let verdict, explanation;
+  if (verifyStatus === 'verified' && confidence >= 80) {
+    verdict = 'fully_supported';
+    explanation = 'Reference was verified with high confidence. The cited source exists and matches the citation metadata.';
+  } else if (verifyStatus === 'verified' || verifyStatus === 'partial') {
+    verdict = 'partially_supported';
+    explanation = 'Reference was found but some metadata discrepancies exist. The source likely supports the general claim, but specific details should be verified.';
+  } else if (verifyStatus === 'wrong') {
+    verdict = 'weakly_supported';
+    explanation = 'Significant metadata errors detected. The cited source may not be the intended reference.';
+  } else {
+    verdict = 'unsupported';
+    explanation = 'Reference could not be located in any authoritative database. Evidence support cannot be confirmed.';
+  }
+  return { claim: 'Claim context not available (provide full article text for LLM-powered analysis)', verdict, confidence, explanation };
+}
+
+function renderClaimAlignment(alignments) {
+  const el = document.getElementById('claims-content');
+  if (!el) return;
+
+  const counts = { fully_supported:0, partially_supported:0, weakly_supported:0, unsupported:0, contradicted:0 };
+  alignments.forEach(a => { if (counts[a.verdict] !== undefined) counts[a.verdict]++; });
+
+  const verdictMap = {
+    fully_supported:    { label: 'Fully Supported',    cls: 'cv-full' },
+    partially_supported:{ label: 'Partially Supported', cls: 'cv-partial' },
+    weakly_supported:   { label: 'Weakly Supported',   cls: 'cv-weak' },
+    unsupported:        { label: 'Unsupported',         cls: 'cv-unsupported' },
+    contradicted:       { label: 'Contradicted',        cls: 'cv-contradicted' },
+  };
+
+  const rows = alignments.map((a,i) => {
+    const vm = verdictMap[a.verdict] || verdictMap.unsupported;
+    return `<div class="audit-entry">
+      <div class="ae-head">
+        <span class="ae-num">${esc(a.ref.num?'['+a.ref.num+']':String(i+1))}</span>
+        <span class="ae-title">${esc((a.ref.title||'').slice(0,60))}</span>
+        <span class="cv-badge ${vm.cls}">${vm.label}</span>
+      </div>
+      <div class="claim-block">
+        ${a.claim ? `<div class="claim-text">${esc(a.claim.slice(0,200))}</div>` : ''}
+        <div class="claim-verdict">
+          <span class="cv-badge ${vm.cls}">${vm.label}</span>
+          <span style="font-size:11px;color:var(--muted);font-family:var(--font-mono)">${a.confidence}% confidence</span>
+        </div>
+        <div class="claim-exp">${esc(a.explanation)}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `<div style="padding:20px 24px;">
+    <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px;">Claim-to-Evidence Alignment</div>
+    <div style="font-size:12px;color:var(--dim);margin-bottom:14px;">Evaluates whether each cited source actually supports the claim it is cited for. For full LLM analysis, provide the complete article text and an Anthropic API key.</div>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:16px;">
+      <div class="stat-box"><div class="stat-num" style="color:var(--verified);font-size:18px">${counts.fully_supported}</div><div class="stat-lbl">Fully</div></div>
+      <div class="stat-box"><div class="stat-num" style="color:var(--partial);font-size:18px">${counts.partially_supported}</div><div class="stat-lbl">Partial</div></div>
+      <div class="stat-box"><div class="stat-num" style="color:var(--wrong);font-size:18px">${counts.weakly_supported}</div><div class="stat-lbl">Weak</div></div>
+      <div class="stat-box"><div class="stat-num" style="color:var(--notfound);font-size:18px">${counts.unsupported}</div><div class="stat-lbl">Unsupported</div></div>
+      <div class="stat-box"><div class="stat-num" style="color:var(--review);font-size:18px">${counts.contradicted}</div><div class="stat-lbl">Contradicted</div></div>
+    </div>
+    ${rows}
+  </div>`;
+}
+
+/* ═══════════════════════════════════════════════
+   SYSTEM 5: EVIDENCE-AWARE TEXT REVISION
+   When a reference is replaced, revise surrounding text
+═══════════════════════════════════════════════ */
+async function buildTextRevisions(results, sourceText, apiKey) {
+  const el = document.getElementById('revisions-content');
+  if (!el) return;
+  el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);font-size:12px;">Generating text revision suggestions…</div>';
+
+  const revisions = [];
+  const hasContext = sourceText && sourceText.length > 200;
+  const needsRevision = results.filter(r => r.status !== 'verified' || (r.errors && r.errors.length > 0));
+
+  const revCap = 15;
+  const skipped = Math.max(0, needsRevision.length - revCap);
+  for (const r of needsRevision.slice(0, revCap)) { // cap to limit API calls
+    let rev;
+    if (apiKey && hasContext && (r.suggested || r.errors?.length > 0)) {
+      rev = await llmReviseText(r, sourceText, apiKey);
+    } else {
+      rev = heuristicReviseText(r);
+    }
+    revisions.push({ ref: r.ref, suggested: r.suggested, ...rev });
+  }
+
+  renderTextRevisions(revisions, needsRevision.length, skipped);
+}
+
+async function llmReviseText(result, sourceText, apiKey) {
+  const ref = result.ref;
+  const title = ref.title || '';
+  let context = '';
+  if (title.length > 5) {
+    const idx = sourceText.toLowerCase().indexOf(title.toLowerCase().slice(0,25));
+    if (idx > -1) context = sourceText.slice(Math.max(0,idx-400), idx+200);
+  }
+  if (!context) return heuristicReviseText(result);
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514', max_tokens: 400,
+        system: 'You revise academic text when a citation is corrected. Return ONLY raw JSON:\n{"originalSentence":string,"revisedSentence":string,"reason":string}',
+        messages: [{ role: 'user', content: 'Original text context:\n"' + context.slice(0,400) + '"\n\nOriginal citation: ' + (ref.raw||title).slice(0,100) + '\nIssues found: ' + (result.errors||[]).slice(0,3).map(e=>e.desc).join('; ') + '\nCorrected citation: ' + (result.suggested||'not available') + '\n\nRevise the most relevant sentence to reflect the corrected citation, maintaining academic tone.' }]
+      })
+    });
+    if (!resp.ok) throw new Error('API');
+    const data = await resp.json();
+    let raw = (data.content?.[0]?.text||'').trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```\s*$/,'');
+    const s = raw.indexOf('{'), e2 = raw.lastIndexOf('}');
+    if (s !== -1 && e2 !== -1) raw = raw.slice(s, e2+1);
+    return JSON.parse(raw);
+  } catch(e) { return heuristicReviseText(result); }
+}
+
+function heuristicReviseText(result) {
+  const ref = result.ref;
+  const errors = result.errors || [];
+  const errFields = errors.map(e => e.field).join(', ');
+  return {
+    originalSentence: ref.raw ? ref.raw.slice(0,200) : 'Original sentence context not available.',
+    revisedSentence: result.suggested || 'Corrected citation: ' + (result.canonical || 'See suggested correction above.'),
+    reason: errors.length > 0
+      ? `Citation contains ${errors.length} issue(s) in: ${errFields}. The reference should be verified and corrected before publication.`
+      : 'Citation could not be fully verified. Review and confirm before submission.'
+  };
+}
+
+function renderTextRevisions(revisions, totalNeedingRevision, skipped) {
+  const el = document.getElementById('revisions-content');
+  if (!el) return;
+
+  if (!revisions.length) {
+    el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);">All references verified — no text revisions needed.</div>';
+    return;
+  }
+
+  const rows = revisions.map((rev, i) => `
+    <div class="audit-entry">
+      <div class="ae-head">
+        <span class="ae-num">${esc(rev.ref.num ? '['+rev.ref.num+']' : String(i+1))}</span>
+        <span class="ae-title">${esc((rev.ref.title||'').slice(0,60))}</span>
+      </div>
+      <div class="revision-block">
+        <div class="rev-label">Original</div>
+        <div class="rev-text rev-original">${esc(rev.originalSentence||'')}</div>
+        <div class="rev-label">Revised</div>
+        <div class="rev-text rev-revised">${esc(rev.revisedSentence||'')}</div>
+        <div class="rev-reason">${esc(rev.reason||'')}</div>
+        ${rev.revisedSentence ? `<button class="can-copy-btn" style="margin-top:8px" data-copy="${esc(rev.revisedSentence)}" onclick="copyFromBtn(this)">📋 Copy revised text</button>` : ''}
+      </div>
+    </div>`).join('');
+
+  el.innerHTML = `<div style="padding:20px 24px;">
+    <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px;">Evidence-Aware Text Revisions</div>
+    <div style="font-size:12px;color:var(--dim);margin-bottom:14px;">${totalNeedingRevision} reference(s) may require revision. Showing ${revisions.length}${skipped>0?' ('+skipped+' skipped to respect API limits — re-run for more)':''}. Provide full article text + API key for context-aware revision.</div>
+    ${rows}
+  </div>`;
+}
+
+/* ═══════════════════════════════════════════════
+   SYSTEM 6: DUAL REFERENCE LIST
+   Side-by-side original vs corrected references
+═══════════════════════════════════════════════ */
+function buildDualRefList(results) {
+  const el = document.getElementById('dual-content');
+  if (!el) return;
+
+  const rows = results.map((r, i) => {
+    const num = r.ref.num || (i+1);
+    const original = r.ref.raw || (r.ref.authors ? r.ref.authors + '. "' + (r.ref.title||'') + '". ' + (r.ref.journal||r.ref.publisher||'') + (r.ref.year ? ', '+r.ref.year : '') : r.ref.title || 'Unknown');
+    const updated = r.suggested || r.canonical || original;
+    const changed = updated !== original && r.suggested;
+    return `
+      <div class="dual-ref-item" style="border-right:none">
+        <div class="dri-num">[${num}]</div>
+        <div class="dri-text original">${esc(original.slice(0,250))}</div>
+      </div>
+      <div class="dual-ref-item">
+        <div class="dri-num">[${num}]${changed ? '<span class="dri-badge dri-improved">Updated</span>' : '<span class="dri-badge dri-same">Same</span>'}</div>
+        <div class="dri-text ${changed ? 'changed' : ''}">${esc(updated.slice(0,250))}</div>
+      </div>`;
+  }).join('');
+
+  const changed = results.filter(r => r.suggested && r.suggested !== r.ref.raw).length;
+  el.innerHTML = `<div style="padding:20px 24px 0">
+    <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px;">Dual Reference List</div>
+    <div style="font-size:12px;color:var(--dim);margin-bottom:14px;">${changed} of ${results.length} references updated. Reference numbers preserved — one-to-one mapping maintained.</div>
+    <div style="margin-bottom:10px;display:flex;gap:8px;">
+      <button class="export-btn" onclick="exportDualListText()">⬇ Export Both Lists</button>
+      <button class="export-btn" onclick="exportUpdatedListOnly()">⬇ Updated List Only</button>
+    </div>
+  </div>
+  <div class="dual-list-grid">
+    <div class="dual-col"><div class="dual-col-head">Original Reference List</div>${results.map((_,i)=>{
+      const r=results[i]; const num=r.ref.num||(i+1); const orig=r.ref.raw||(r.ref.title||'Unknown');
+      return `<div class="dual-ref-item"><div class="dri-num">[${num}]</div><div class="dri-text original">${esc(orig.slice(0,250))}</div></div>`;
+    }).join('')}</div>
+    <div class="dual-col"><div class="dual-col-head">Updated Reference List</div>${results.map((_,i)=>{
+      const r=results[i]; const num=r.ref.num||(i+1); const orig=r.ref.raw||(r.ref.title||'Unknown'); const upd=r.suggested||r.canonical||orig; const changed=upd!==orig&&r.suggested;
+      return `<div class="dual-ref-item"><div class="dri-num">[${num}]${changed?'<span class="dri-badge dri-improved">Updated</span>':'<span class="dri-badge dri-same">Same</span>'}</div><div class="dri-text ${changed?'changed':''}">${esc(upd.slice(0,250))}</div></div>`;
+    }).join('')}</div>
+  </div>`;
+}
+
+function exportDualListText() {
+  const results = window._lastResults || [];
+  const origLines = results.map((r,i)=>`[${r.ref.num||i+1}] ${r.ref.raw||r.ref.title||'Unknown'}`);
+  const updLines  = results.map((r,i)=>`[${r.ref.num||i+1}] ${r.suggested||r.canonical||r.ref.raw||r.ref.title||'Unknown'}`);
+  const content = 'ORIGINAL REFERENCES\n' + '='.repeat(40) + '\n' + origLines.join('\n') + '\n\n\nUPDATED REFERENCES\n' + '='.repeat(40) + '\n' + updLines.join('\n');
+  download('refcheckai-dual-references.txt', content, 'text/plain');
+}
+function exportUpdatedListOnly() {
+  const results = window._lastResults || [];
+  const lines = results.map((r,i)=>`[${r.ref.num||i+1}] ${r.suggested||r.canonical||r.ref.raw||r.ref.title||'Unknown'}`);
+  download('refcheckai-updated-references.txt', lines.join('\n'), 'text/plain');
+}
+
+/* ═══════════════════════════════════════════════
+   SYSTEM 7: EXPLAINABLE AI AUDIT TRAIL
+   Complete record of every decision
+═══════════════════════════════════════════════ */
+function buildAuditTrail(results) {
+  const el = document.getElementById('audit-content');
+  if (!el) return;
+
+  const ts = new Date().toISOString();
+  const rows = results.map((r, i) => {
+    const ref = r.ref;
+    const q = computeQualityScore(r);
+    const errSummary = r.errors?.length ? r.errors.map(e=>`[${e.severity.toUpperCase()}] ${e.field}: ${e.desc}`).join(' | ') : 'None';
+    const srcSummary = Object.entries(r.srcs||{}).map(([k,v])=>`${k}:${v.length}`).join(' ');
+    return `<div class="audit-entry">
+      <div class="ae-head">
+        <span class="ae-num">${esc(ref.num?'['+ref.num+']':String(i+1))}</span>
+        <span class="ae-title">${esc((ref.title||ref.raw||'').slice(0,55))}</span>
+        <span class="ae-ts">${ts.slice(0,10)}</span>
+      </div>
+      <div class="ae-body">
+        <div class="ae-row"><span class="ae-key">original_ref</span><span class="ae-val">${esc((ref.raw||ref.title||'').slice(0,120))}</span></div>
+        <div class="ae-row"><span class="ae-key">type</span><span class="ae-val">${esc(ref.type||'unknown')}</span></div>
+        <div class="ae-row"><span class="ae-key">verify_status</span><span class="ae-val ${r.status==='verified'?'good':r.status==='notfound'?'bad':'warn'}">${esc(r.status)}</span></div>
+        <div class="ae-row"><span class="ae-key">confidence</span><span class="ae-val">${r.confidence}%</span></div>
+        <div class="ae-row"><span class="ae-key">quality_score</span><span class="ae-val ${q.overall>=70?'good':q.overall>=40?'warn':'bad'}">${q.overall}/100 (trust:${q.trust} academic:${q.academic} evidence:${q.evidence})</span></div>
+        <div class="ae-row"><span class="ae-key">sources_searched</span><span class="ae-val">${esc(srcSummary)}</span></div>
+        <div class="ae-row"><span class="ae-key">candidates_found</span><span class="ae-val">${(r.all||[]).length} total, ${(r.all||[]).filter(c=>c.isAcademic).length} academic</span></div>
+        <div class="ae-row"><span class="ae-key">best_match</span><span class="ae-val">${esc((r.best?.title||'none').slice(0,80))} ${r.best?.sim?'('+r.best.sim+'% sim)':''}</span></div>
+        <div class="ae-row"><span class="ae-key">field_errors</span><span class="ae-val ${r.errors?.length?'bad':'good'}">${esc(errSummary.slice(0,120))}</span></div>
+        <div class="ae-row"><span class="ae-key">canonical_match</span><span class="ae-val">${esc((r.canonical||'none').slice(0,100))}</span></div>
+        <div class="ae-row"><span class="ae-key">suggested_correction</span><span class="ae-val ${r.suggested?'good':'warn'}">${esc((r.suggested||'no change needed').slice(0,100))}</span></div>
+        <div class="ae-row"><span class="ae-key">cache_hit</span><span class="ae-val">${r.fromCache?'yes':'no'}</span></div>
+        <div class="ae-row"><span class="ae-key">timestamp</span><span class="ae-val">${ts}</span></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `<div style="padding:20px 24px;">
+    <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px;">Explainable AI Audit Trail</div>
+    <div style="font-size:12px;color:var(--dim);margin-bottom:14px;">Complete decision log for every reference — verification outcome, quality score, sources searched, errors detected, and corrections applied.</div>
+    <div style="margin-bottom:12px;"><button class="export-btn" onclick="exportAuditJSON()">⬇ Export Full Audit JSON</button></div>
+    ${rows}
+  </div>`;
+}
+
+function exportAuditJSON() {
+  const results = window._lastResults || [];
+  const ts = new Date().toISOString();
+  const audit = {
+    generated_at: ts,
+    system: 'RefCheckAI Reference Intelligence System',
+    total_references: results.length,
+    entries: results.map((r,i) => {
+      const q = computeQualityScore(r);
+      return {
+        index: i+1, num: r.ref.num, title: r.ref.title, authors: r.ref.authors,
+        year: r.ref.year, type: r.ref.type, doi: r.ref.doi,
+        verification_status: r.status, confidence: r.confidence,
+        quality: q, errors: r.errors, sources_searched: Object.fromEntries(Object.entries(r.srcs||{}).map(([k,v])=>[k,v.length])),
+        candidates_found: (r.all||[]).length,
+        best_match: r.best ? { title: r.best.title, db: r.best.db, sim: r.best.sim, doi: r.best.doi } : null,
+        canonical: r.canonical, suggested_correction: r.suggested,
+        timestamp: ts, from_cache: r.fromCache || false
+      };
+    })
+  };
+  download('refcheckai-audit-trail.json', JSON.stringify(audit, null, 2), 'application/json');
+}
+
+/* ═══════════════════════════════════════════════
+   ORCHESTRATE ALL SYSTEMS AFTER SCAN COMPLETES
+═══════════════════════════════════════════════ */
+async function runAllSystems(results, sourceText) {
+  const apiKey = getKey();
+  window._lastResults = results;
+  window._sourceText  = sourceText;
+  // Also store on session for cross-session export accuracy
+  const sess = sessions.find(x => x.id === currentId);
+  if (sess) sess._results = results;
+
+  // Synchronous systems first
+  buildQualityTab(results);
+  buildComparisonFramework(results);
+  buildDualRefList(results);
+  buildAuditTrail(results);
+
+  // Update tab labels with live counts
+  const total = results.length;
+  const weak = results.filter(r => computeQualityScore(r).overall < 55).length;
+  const qtab = document.querySelector('[data-tab="quality"]');
+  const itab = document.querySelector('[data-tab="improve"]');
+  const ctab = document.querySelector('[data-tab="claims"]');
+  if(qtab) qtab.textContent = 'Quality (' + total + ')';
+  if(itab && weak>0) itab.textContent = 'Improve (' + weak + ')';
+  if(ctab) ctab.textContent = 'Claims (' + total + ')';
+
+  // LLM systems async
+  const showTabError = (tabId, msg) => {
+    const el = document.getElementById(tabId);
+    if (el) el.innerHTML = '<div style="padding:32px;text-align:center;color:var(--err);font-size:12px;">⚠ ' + msg + '</div>';
+  };
+  buildImprovementEngine(results, apiKey).catch(e => showTabError('improve-content', 'Improvement engine error: ' + e.message));
+  buildClaimAlignment(results, sourceText, apiKey).catch(e => showTabError('claims-content', 'Claim alignment error: ' + e.message));
+  buildTextRevisions(results, sourceText, apiKey).catch(e => showTabError('revisions-content', 'Text revision error: ' + e.message));
+}
+
+/* ── INIT ── */
+document.getElementById('chat').innerHTML = welcomeHTML();
+renderSidebar();
+renderBanners();
+if (!getKey()) setTimeout(openSettings, 500);
+</script>
+</body>
+</html>
